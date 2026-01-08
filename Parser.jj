@@ -1,0 +1,30 @@
+options {
+  STATIC = false;
+}
+
+PARSER_BEGIN(Parser)
+public class Parser {
+  public static void main(String[] args) throws Exception {
+    System.out.println("Comenzando...");
+    Parser parser = new Parser(System.in);
+    parser.Program();
+    System.out.println("Programa analizado exitosamente.");
+  }
+}
+PARSER_END(Parser)
+
+SKIP : { " " | "\t" | "\r" | "\n" }
+SKIP : { "*>" (~["\r","\n"])* }
+SKIP : { ("\r\n"|"\n"|"\r") "      " "*" (~["\r","\n"])* }
+
+TOKEN : { < DOT: "." > }
+TOKEN : { < PROGRAM: "PROGRAM" > }
+TOKEN : { < BEGIN: "BEGIN" > }
+TOKEN : { < END: "END" > }
+TOKEN : { < ID: (["A"-"Z"]) (["A"-"Z","0"-"9","-"])* (["A"-"Z","0"-"9"]) | (["A"-"Z"]) > }
+
+void Program() : { Token progName; } {
+  <PROGRAM> progName=<ID> <DOT>
+  <BEGIN>
+  <END> <DOT>
+}
