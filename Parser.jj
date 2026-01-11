@@ -45,5 +45,26 @@ TOKEN :
 void Program() : { Token progName; } {
   <PROGRAM> progName=<ID> <DOT>
   <BEGIN>
+  stmts()
   <END> <DOT>
 }
+
+void stmts() : {}
+{
+  ( stmt() )*
+}
+
+void stmt() : {}
+{
+  ( loop() <DOT>
+  | cond() <DOT>
+  | assig() <DOT>
+  | io() <DOT>
+  )
+}
+
+// Esqueletos vacíos para que compile
+void loop() : {} { /* ... */ }
+void cond() : {} { /* ... */ }
+void assig() : {} { /* ... */ }
+void io() : {} { /* ... */ }
