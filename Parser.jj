@@ -5,36 +5,43 @@ options {
 PARSER_BEGIN(Parser)
 public class Parser {
   public static void main(String[] args) throws Exception {
-    System.out.println("Comenzando...");
     Parser parser = new Parser(System.in);
     parser.Program();
-    System.out.println("Programa analizado exitosamente.");
+    System.out.println("Programa analizado correctamente.");
   }
 }
 PARSER_END(Parser)
 
+/* ====== ESPACIOS ====== */
 SKIP :
 {
   " " | "\t" | "\r" | "\n"
 }
 
+/* ====== COMENTARIO COBOL *> ====== */
 SKIP :
 {
-  "*" ">" (~["\r","\n"])*
+  < COMMENT : "*>"
+    (~["\r","\n"])* >
 }
 
-SKIP :
-{
-  "\r\n" | "\n" | "\r"
-}
-
-
+/* ====== TOKENS ====== */
 TOKEN : { < DOT: "." > }
 TOKEN : { < PROGRAM: "PROGRAM" > }
 TOKEN : { < BEGIN: "BEGIN" > }
 TOKEN : { < END: "END" > }
-TOKEN : { < ID: (["A"-"Z"]) (["A"-"Z","0"-"9","-"])* (["A"-"Z","0"-"9"]) | (["A"-"Z"]) > }
 
+TOKEN :
+{
+  < ID:
+    (["A"-"Z"])
+    (["A"-"Z","0"-"9","-"])* 
+    (["A"-"Z","0"-"9"])
+  | (["A"-"Z"])
+  >
+}
+
+/* ====== GRAMÁTICA ====== */
 void Program() : { Token progName; } {
   <PROGRAM> progName=<ID> <DOT>
   <BEGIN>
