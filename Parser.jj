@@ -13,9 +13,21 @@ public class Parser {
 }
 PARSER_END(Parser)
 
-SKIP : { " " | "\t" | "\r" | "\n" }
-SKIP : { "*>" (~["\r","\n"])* }
-SKIP : { ("\r\n"|"\n"|"\r") "      " "*" (~["\r","\n"])* }
+SKIP :
+{
+  " " | "\t" | "\r" | "\n"
+}
+
+SKIP :
+{
+  "*" ">" (~["\r","\n"])*
+}
+
+SKIP :
+{
+  "\r\n" | "\n" | "\r"
+}
+
 
 TOKEN : { < DOT: "." > }
 TOKEN : { < PROGRAM: "PROGRAM" > }
