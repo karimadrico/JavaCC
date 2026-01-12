@@ -106,8 +106,24 @@ void stmt() : {}
   )
 }
 
+
+// Entrada y salida
+void io() : {}
+{
+  (
+    <LEE> <ID>
+    |
+    <MUESTRA> literal() ( <COMA> literal() )*
+  )
+}
+
+// Un literal puede ser ID, NUM o CAD
+void literal() : {}
+{
+  <ID> | <NUM> | <CAD>
+}
+
 // Esqueletos vacíos para que compile
 void loop() : {} { /* ... */ }
 void cond() : {} { /* ... */ }
 void assig() : {} { /* ... */ }
-void io() : {} { /* ... */ }
