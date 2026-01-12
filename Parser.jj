@@ -134,6 +134,10 @@ void assig() : {}
     <MULTIPLICA> valor() <POR> <ID>
     |
     <DIVIDE> valor() <ENTRE> <ID>
+    |
+    <MUEVE> valor() <A> <ID>
+    |
+    <CALCULA> <ID> ( '=' valor() <FIN_CALCULA> | <COMO> valor() )
   )
 }
 
