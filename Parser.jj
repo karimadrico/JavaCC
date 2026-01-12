@@ -81,8 +81,8 @@ TOKEN : {
   | (["A"-"Z"])
   >
   | < NUM: (["0"-"9"])+ >
-  | < CAD: '"' ( ~["\r\n"] )* '"' >
-  | < CAD: '\'' ( ~['\r\n'] )* '\'' >
+  | < CAD_DOBLE: '"' ( ~["\r\n"] )* '"' >
+  | < CAD_SIMPLE: '\'' ( ~['\r\n'] )* '\'' >
 }
 
 /* ====== GRAMÁTICA ====== */
@@ -118,10 +118,10 @@ void io() : {}
   )
 }
 
-// Un literal puede ser ID, NUM o CAD
+// Un literal puede ser ID, NUM o cadena
 void literal() : {}
 {
-  <ID> | <NUM> | <CAD>
+  <ID> | <NUM> | <CAD_DOBLE> | <CAD_SIMPLE>
 }
 
 // Asignaciones: SUMA y RESTA
