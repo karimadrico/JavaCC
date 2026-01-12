@@ -130,6 +130,10 @@ void assig() : {}
     <SUMA> valor() ( valor() )* <A> <ID>
     |
     <RESTA> valor() ( valor() )* <DE> <ID>
+    |
+    <MULTIPLICA> valor() <POR> <ID>
+    |
+    <DIVIDE> valor() <ENTRE> <ID>
   )
 }
 
