@@ -81,7 +81,8 @@ TOKEN : {
   | (["A"-"Z"])
   >
   | < NUM: (["0"-"9"])+ >
-  | < CAD: ( '"' (~['"','\n','\r'])* '"' ) | ( "'" (~["'",'\n','\r'])* "'" ) >
+  | < CAD: '"' ( ~["\r\n"] )* '"' >
+  | < CAD: '\'' ( ~['\r\n'] )* '\'' >
 }
 
 /* ====== GRAMÁTICA ====== */
@@ -123,7 +124,22 @@ void literal() : {}
   <ID> | <NUM> | <CAD>
 }
 
+// Asignaciones: SUMA y RESTA
+void assig() : {}
+{
+  (
+    <SUMA> valor() ( valor() )* <A> <ID>
+    |
+    <RESTA> valor() ( valor() )* <DE> <ID>
+  )
+}
+
+// Un valor puede ser ID, NUM o una expresión entre paréntesis
+void valor() : {}
+{
+  <ID> | <NUM> | <PARENOPEN> valor() <PARENCLOSE>
+}
+
 // Esqueletos vacíos para que compile
 void loop() : {} { /* ... */ }
 void cond() : {} { /* ... */ }
-void assig() : {} { /* ... */ }
