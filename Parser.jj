@@ -98,11 +98,7 @@ void stmts() : {}
   ( stmt() )*
 }
 
-void loop() : {}
-
 // Entrada y salida
-
-void cond() : {}
 void io() : {}
 {
   (
