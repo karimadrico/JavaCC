@@ -2,15 +2,15 @@ options {
   STATIC = false;
 }
 
-PARSER_BEGIN(Parser)
-public class Parser {
+PARSER_BEGIN(CobolCompiler)
+public class CobolCompiler {
   public static void main(String[] args) throws Exception {
-    Parser parser = new Parser(System.in);
+    CobolCompiler parser = new CobolCompiler(System.in);
     parser.Program();
     System.out.println("Programa analizado correctamente.");
   }
 }
-PARSER_END(Parser)
+PARSER_END(CobolCompiler)
 
 /* ====== ESPACIOS ====== */
 SKIP :
@@ -71,6 +71,7 @@ TOKEN : { < POR_OP: "*" > }
 TOKEN : { < DIV_OP: "/" > }
 TOKEN : { < PARENOPEN: "(" > }
 TOKEN : { < PARENCLOSE: ")" > }
+TOKEN : { < IGUAL_OP: "=" > }
 
 // Identificadores, números y cadenas
 TOKEN : {
@@ -137,7 +138,7 @@ void assig() : {}
     |
     <MUEVE> valor() <A> <ID>
     |
-    <CALCULA> <ID> ( '=' valor() <FIN_CALCULA> | <COMO> valor() )
+    <CALCULA> <ID> ( <IGUAL_OP> valor() <FIN_CALCULA> | <COMO> valor() )
   )
 }
 
