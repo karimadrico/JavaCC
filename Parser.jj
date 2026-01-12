@@ -27,18 +27,61 @@ SKIP :
 
 /* ====== TOKENS ====== */
 TOKEN : { < DOT: "." > }
+
+// Palabras reservadas principales
 TOKEN : { < PROGRAM: "PROGRAM" > }
 TOKEN : { < BEGIN: "BEGIN" > }
 TOKEN : { < END: "END" > }
+TOKEN : { < LEE: "LEE" > }
+TOKEN : { < MUESTRA: "MUESTRA" > }
+TOKEN : { < SUMA: "SUMA" > }
+TOKEN : { < RESTA: "RESTA" > }
+TOKEN : { < MULTIPLICA: "MULTIPLICA" > }
+TOKEN : { < DIVIDE: "DIVIDE" > }
+TOKEN : { < MUEVE: "MUEVE" > }
+TOKEN : { < CALCULA: "CALCULA" > }
+TOKEN : { < COMO: "COMO" > }
+TOKEN : { < FIN_CALCULA: "FIN-CALCULA" > }
+TOKEN : { < DE: "DE" > }
+TOKEN : { < A: "A" > }
+TOKEN : { < POR: "POR" > }
+TOKEN : { < ENTRE: "ENTRE" > }
+TOKEN : { < DANDO: "DANDO" > }
+TOKEN : { < SI: "SI" > }
+TOKEN : { < ENTONCES: "ENTONCES" > }
+TOKEN : { < SINO: "SINO" > }
+TOKEN : { < FIN_SI: "FIN-SI" > }
+TOKEN : { < EJECUTA: "EJECUTA" > }
+TOKEN : { < FIN_EJECUTA: "FIN-EJECUTA" > }
+TOKEN : { < HASTA_QUE: "HASTA-QUE" > }
+TOKEN : { < VECES: "VECES" > }
+TOKEN : { < USANDO: "USANDO" > }
+TOKEN : { < NO: "NO" > }
+TOKEN : { < ES: "ES" > }
+TOKEN : { < MAYOR: "MAYOR" > }
+TOKEN : { < MENOR: "MENOR" > }
+TOKEN : { < IGUAL: "IGUAL" > }
+TOKEN : { < QUE: "QUE" > }
 
-TOKEN :
-{
+// Operadores y puntuación
+TOKEN : { < COMA: "," > }
+TOKEN : { < MAS: "+" > }
+TOKEN : { < MENOS: "-" > }
+TOKEN : { < POR_OP: "*" > }
+TOKEN : { < DIV_OP: "/" > }
+TOKEN : { < PARENOPEN: "(" > }
+TOKEN : { < PARENCLOSE: ")" > }
+
+// Identificadores, números y cadenas
+TOKEN : {
   < ID:
     (["A"-"Z"])
-    (["A"-"Z","0"-"9","-"])* 
+    (["A"-"Z","0"-"9","-"])*
     (["A"-"Z","0"-"9"])
   | (["A"-"Z"])
   >
+  | < NUM: (["0"-"9"])+ >
+  | < CAD: ( '"' (~['"','\n','\r'])* '"' ) | ( "'" (~["'",'\n','\r'])* "'" ) >
 }
 
 /* ====== GRAMÁTICA ====== */
