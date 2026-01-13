@@ -149,10 +149,8 @@ void valor() : {}
 
 void loop() : {}
 {
-  // vacío, sin bloque {}
 }
 
 void cond() : {}
 {
-  // vacío, sin bloque {}
 }
