@@ -147,14 +147,12 @@ void valor() : {}
   <ID> | <NUM> | <PARENOPEN> valor() <PARENCLOSE>
 }
 
-
-// Esqueletos vacíos para que compile
 void loop() : {}
 {
-  {}
+  // vacío, sin bloque {}
 }
 
 void cond() : {}
 {
-  {}
+  // vacío, sin bloque {}
 }
