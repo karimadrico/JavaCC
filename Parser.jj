@@ -3,11 +3,32 @@ options {
 }
 
 PARSER_BEGIN(CobolCompiler)
+import java.util.*;
+import java.io.*;
+
 public class CobolCompiler {
+  // Estructura para registrar variables usadas
+  private Set<String> variables = new HashSet<>();
+  // Lista para almacenar el código intermedio generado
+  private List<String> codigoIntermedio = new ArrayList<>();
+
   public static void main(String[] args) throws Exception {
-    CobolCompiler parser = new CobolCompiler(System.in);
+    InputStream input;
+    if (args.length > 0) {
+      input = new FileInputStream(args[0]);
+    } else {
+      input = System.in;
+    }
+    CobolCompiler parser = new CobolCompiler(input);
     parser.Program();
-    System.out.println("Programa analizado correctamente.");
+    System.out.println("Programa analizado correctamente.\n\nVariables usadas:");
+    for (String v : parser.variables) {
+      System.out.println("  " + v);
+    }
+    System.out.println("\nCódigo intermedio generado:");
+    for (String linea : parser.codigoIntermedio) {
+      System.out.println(linea);
+    }
   }
 }
 PARSER_END(CobolCompiler)
@@ -111,16 +132,21 @@ void stmt() : {}
 void io() : {}
 {
   (
-    <LEE> <ID>
+    <LEE> id=<ID> { variables.add(id.image); codigoIntermedio.add("READ " + id.image); }
     |
-    <MUESTRA> literal() ( <COMA> literal() )*
+    <MUESTRA> t1=literal() { codigoIntermedio.add("PRINT " + t1.image); }
+      ( <COMA> t2=literal() { codigoIntermedio.add("PRINT " + t2.image); } )*
   )
 }
 
 // Un literal puede ser ID, NUM o cadena
 void literal() : {}
 {
-  <ID> | <NUM>
+  (
+    t:<ID> { variables.add(t.image); return t; }
+    |
+    t:<NUM> { return t; }
+  )
 }
 
 // Asignaciones: SUMA y RESTA
@@ -144,7 +170,13 @@ void assig() : {}
 // Un valor puede ser ID, NUM o una expresión entre paréntesis
 void valor() : {}
 {
-  <ID> | <NUM> | <PARENOPEN> valor() <PARENCLOSE>
+  (
+    t:<ID> { variables.add(t.image); return t; }
+    |
+    t:<NUM> { return t; }
+    |
+    <PARENOPEN> t=valor() <PARENCLOSE> { return t; }
+  )
 }
 
 void loop() : {}
