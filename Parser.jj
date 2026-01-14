@@ -107,23 +107,21 @@ TOKEN : {
 }
 
 /* ====== GRAMÁTICA ====== */
-void Program() : { Token progName; } {
-  <PROGRAM> progName=<ID> <DOT>
+void programa() : {} {
+  <PROGRAM> <ID> <DOT>
   <BEGIN>
-  stmts()
+  sentencias()
   <END> <DOT>
 }
 
-void stmts() : {}
-{
-  ( stmt() )*
+void sentencias() : {} {
+  ( sentencia() )*
 }
 
-void stmt() : {}
-{
-  ( loop() <DOT>
-  | cond() <DOT>
-  | assig() <DOT>
+void sentencia() : {} {
+  ( bucle() <DOT>
+  | condicional() <DOT>
+  | asignacion() <DOT>
   | io() <DOT>
   )
 }
@@ -158,8 +156,7 @@ void asignacion() : {} {
   )
 }
 
-void io() : {}
-{
+void io() : {} {
   (
     <LEE> id=<ID> { variables.add(id.image); codigoIntermedio.add("READ " + id.image); }
     |
@@ -167,9 +164,7 @@ void io() : {}
   )
 }
 
-// Un literal puede ser ID, NUM o cadena
-void literal() : {}
-{
+void literal() : {} {
   (
     <ID> { variables.add(token.image); codigoIntermedio.add("PRINT " + token.image); }
     |
@@ -179,9 +174,7 @@ void literal() : {}
   )
 }
 
-// Un valor puede ser ID, NUM o una expresión entre paréntesis
-void valor() : {}
-{
+void valor() : {} {
   (
     <ID> { variables.add(token.image); }
     |
@@ -191,9 +184,7 @@ void valor() : {}
   )
 }
 
-// Expresión booleana simple para condicionales y bucles
-void expr() : {}
-{
+void expr() : {} {
   valor() (<MAS> valor() | <MENOS> valor() | <POR_OP> valor() | <DIV_OP> valor())*
   ( <ES> (<NO>)? (<MAYOR>|<MENOR>|<IGUAL>) (<QUE>|<A>)? valor() )?
 }
