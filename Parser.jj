@@ -134,8 +134,7 @@ void io() : {}
   (
     <LEE> id=<ID> { variables.add(id.image); codigoIntermedio.add("READ " + id.image); }
     |
-    <MUESTRA> t1=literal() { codigoIntermedio.add("PRINT " + t1.image); }
-      ( <COMA> t2=literal() { codigoIntermedio.add("PRINT " + t2.image); } )*
+    <MUESTRA> literal() { /* acción en literal() */ } ( <COMA> literal() { /* acción en literal() */ } )*
   )
 }
 
@@ -143,9 +142,9 @@ void io() : {}
 void literal() : {}
 {
   (
-    t:<ID> { variables.add(t.image); return t; }
+    <ID> { variables.add(token.image); codigoIntermedio.add("PRINT " + token.image); }
     |
-    t:<NUM> { return t; }
+    <NUM> { codigoIntermedio.add("PRINT " + token.image); }
   )
 }
 
@@ -171,11 +170,11 @@ void assig() : {}
 void valor() : {}
 {
   (
-    t:<ID> { variables.add(t.image); return t; }
+    <ID> { variables.add(token.image); }
     |
-    t:<NUM> { return t; }
+    <NUM>
     |
-    <PARENOPEN> t=valor() <PARENCLOSE> { return t; }
+    <PARENOPEN> valor() <PARENCLOSE>
   )
 }
 
