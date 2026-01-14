@@ -149,8 +149,23 @@ void valor() : {}
 
 void loop() : {}
 {
+  (
+    // Bucle tipo WHILE: EJECUTA stmts HASTA-QUE cond FIN-EJECUTA
+    <EJECUTA> stmts() <HASTA_QUE> cond() <FIN_EJECUTA>
+    |
+    // Bucle tipo FOR: ID = NUM [A NUM [POR NUM]] VECES stmts
+    <ID> <IGUAL_OP> <NUM> (<A> <NUM> (<POR> <NUM>)?)? <VECES> stmts() <FIN_EJECUTA>
+  )
 }
 
 void cond() : {}
 {
+  // Condicional SI expr ENTONCES stmts [SINO stmts] FIN-SI
+  <SI> expr() <ENTONCES> stmts() (<SINO> stmts())? <FIN_SI>
+}
+
+// Expresión booleana simple para condicionales y bucles
+void expr() : {}
+{
+  valor() (<MAYOR>|<MENOR>|<IGUAL>) valor() ( <NO> )?
 }
