@@ -103,7 +103,7 @@ TOKEN : {
   | (["A"-"Z"])
   >
   | < NUM: (["0"-"9"])+ >
-  
+  | < CAD: "\"" (~["\""]) "*" "\"" >
 }
 
 /* ====== GRAMÁTICA ====== */
@@ -128,29 +128,21 @@ void stmt() : {}
   )
 }
 
-// Entrada y salida
-void io() : {}
-{
+void bucle() : {} {
   (
-    <LEE> id=<ID> { variables.add(id.image); codigoIntermedio.add("READ " + id.image); }
+    <EJECUTA> sentencias() <FIN_EJECUTA> <HASTA_QUE> expr()
     |
-    <MUESTRA> literal() { /* acción en literal() */ } ( <COMA> literal() { /* acción en literal() */ } )*
+    <EJECUTA> <NUM> <VECES> <USANDO> <ID> sentencias() <FIN_EJECUTA>
+    |
+    <EJECUTA> <ID> <VECES> <USANDO> <ID> sentencias() <FIN_EJECUTA>
   )
 }
 
-// Un literal puede ser ID, NUM o cadena
-void literal() : {}
-{
-  (
-    <ID> { variables.add(token.image); codigoIntermedio.add("PRINT " + token.image); }
-    |
-    <NUM> { codigoIntermedio.add("PRINT " + token.image); }
-  )
+void condicional() : {} {
+  <SI> expr() <ENTONCES> sentencias() (<SINO> sentencias())? <FIN_SI>
 }
 
-// Asignaciones: SUMA y RESTA
-void assig() : {}
-{
+void asignacion() : {} {
   (
     <SUMA> valor() ( valor() )* <A> <ID>
     |
@@ -166,6 +158,27 @@ void assig() : {}
   )
 }
 
+void io() : {}
+{
+  (
+    <LEE> id=<ID> { variables.add(id.image); codigoIntermedio.add("READ " + id.image); }
+    |
+    <MUESTRA> literal() ( <COMA> literal() )*
+  )
+}
+
+// Un literal puede ser ID, NUM o cadena
+void literal() : {}
+{
+  (
+    <ID> { variables.add(token.image); codigoIntermedio.add("PRINT " + token.image); }
+    |
+    <NUM> { codigoIntermedio.add("PRINT " + token.image); }
+    |
+    <CAD> { codigoIntermedio.add("PRINT " + token.image); }
+  )
+}
+
 // Un valor puede ser ID, NUM o una expresión entre paréntesis
 void valor() : {}
 {
@@ -178,25 +191,9 @@ void valor() : {}
   )
 }
 
-void loop() : {}
-{
-  (
-    // Bucle tipo WHILE: EJECUTA stmts HASTA-QUE cond FIN-EJECUTA
-    <EJECUTA> stmts() <HASTA_QUE> cond() <FIN_EJECUTA>
-    |
-    // Bucle tipo FOR: ID = NUM [A NUM [POR NUM]] VECES stmts
-    <ID> <IGUAL_OP> <NUM> (<A> <NUM> (<POR> <NUM>)?)? <VECES> stmts() <FIN_EJECUTA>
-  )
-}
-
-void cond() : {}
-{
-  // Condicional SI expr ENTONCES stmts [SINO stmts] FIN-SI
-  <SI> expr() <ENTONCES> stmts() (<SINO> stmts())? <FIN_SI>
-}
-
 // Expresión booleana simple para condicionales y bucles
 void expr() : {}
 {
-  valor() (<MAYOR>|<MENOR>|<IGUAL>) valor() ( <NO> )?
+  valor() (<MAS> valor() | <MENOS> valor() | <POR_OP> valor() | <DIV_OP> valor())*
+  ( <ES> (<NO>)? (<MAYOR>|<MENOR>|<IGUAL>) (<QUE>|<A>)? valor() )?
 }
