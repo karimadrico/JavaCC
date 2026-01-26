@@ -20,7 +20,7 @@ public class CobolCompiler {
       input = System.in;
     }
     CobolCompiler parser = new CobolCompiler(input);
-    parser.Program();
+    parser.programa();
     System.out.println("Programa analizado correctamente.\n\nVariables usadas:");
     for (String v : parser.variables) {
       System.out.println("  " + v);
@@ -49,7 +49,7 @@ SKIP :
 /* -------------------- COMENTARIO COBOL línea completa (asterisco en columna 7) -------------------- */
 SKIP :
 {
-  < COMMENT_LINE : "\n" "      " "*" (~["\r","\n"])* >
+  "\n" "      " "*" (~["\r","\n"])*
 }
 
 /* -------------------- TOKENS -------------------- */
@@ -128,31 +128,33 @@ void sentencia() : {} {
 
 void bucle() : {} {
   (
-    <EJECUTA> sentencias() <FIN_EJECUTA> <HASTA_QUE> expr()
+    <WHILE> booleanExpr() <DO> sentencias() <END>
     |
-    <EJECUTA> <NUM> <VECES> <USANDO> <ID> sentencias() <FIN_EJECUTA>
+    <VARYING> <ID> <FROM> atomic() <TO> atomic() <BY> atomic() <DO> sentencias() <END>
     |
-    <EJECUTA> <ID> <VECES> <USANDO> <ID> sentencias() <FIN_EJECUTA>
+    <VARYING> <ID> <FROM> atomic() <TO> atomic() <DO> sentencias() <END>
+    |
+    <VARYING> <ID> <TO> atomic() <BY> atomic() <DO> sentencias() <END>
+    |
+    <VARYING> <ID> <TO> atomic() <DO> sentencias() <END>
   )
 }
 
 void condicional() : {} {
-  <SI> expr() <ENTONCES> sentencias() (<SINO> sentencias())? <FIN_SI>
+  <IF> booleanExpr() <THEN> sentencias() (<ELSE> sentencias())? <END>
 }
 
 void asignacion() : {} {
   (
-    <SUMA> valor() ( valor() )* <A> <ID>
+    <MOVE> expr() <TO> <ID>
     |
-    <RESTA> valor() ( valor() )* <DE> <ID>
+    <ADD> expr() <TO> <ID>
     |
-    <MULTIPLICA> valor() <POR> <ID>
+    <SUBTRACT> expr() <FROM> <ID>
     |
-    <DIVIDE> valor() <ENTRE> <ID>
+    <MULTIPLY> expr() <BY> expr() <GIVING> <ID>
     |
-    <MUEVE> valor() <A> <ID>
-    |
-    <CALCULA> <ID> ( <IGUAL_OP> valor() <FIN_CALCULA> | <COMO> valor() )
+    <DIVIDE> expr() <BY> expr() <GIVING> <ID>
   )
 }
 
@@ -160,7 +162,9 @@ void io() : {} {
   (
     <ACCEPT> id=<ID> { variables.add(id.image); codigoIntermedio.add("READ " + id.image); }
     |
-    <DISPLAY> literal() ( <COMA> literal() )*
+    <DISPLAY> literal()
+    |
+    <DISPLAY> literal() <COMA> literal() ( <COMA> literal() )*
   )
 }
 
@@ -176,17 +180,44 @@ void literal() : {} {
   )
 }
 
-void valor() : {} {
+void atomic() : {} {
+  (
+    <ID> { variables.add(token.image); }
+    |
+    <NUM>
+  )
+}
+
+void expr() : {} {
+  mult() ( (<MAS> | <MENOS>) mult() )*
+}
+
+void mult() : {} {
+  val() ( (<POR_OP> | <DIV_OP>) val() )*
+}
+
+void val() : {} {
   (
     <ID> { variables.add(token.image); }
     |
     <NUM>
     |
-    <PARENOPEN> valor() <PARENCLOSE>
+    <PARENOPEN> expr() <PARENCLOSE>
   )
 }
 
-void expr() : {} {
-  valor() (<MAS> valor() | <MENOS> valor() | <POR_OP> valor() | <DIV_OP> valor())*
-  ( <ES> (<NO>)? (<MAYOR>|<MENOR>|<IGUAL>) (<QUE>|<A>)? valor() )?
+void booleanExpr() : {} {
+  (
+    expr() <IS> <GREATER> <THAN> expr()
+    |
+    expr() <IS> <LESS> <THAN> expr()
+    |
+    expr() <IS> <EQUAL> <TO> expr()
+    |
+    expr() <IS> <NOT> <GREATER> <THAN> expr()
+    |
+    expr() <IS> <NOT> <LESS> <THAN> expr()
+    |
+    expr() <IS> <NOT> <EQUAL> <TO> expr()
+  )
 }
