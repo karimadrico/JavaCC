@@ -158,9 +158,9 @@ void asignacion() : {} {
 
 void io() : {} {
   (
-    <LEE> id=<ID> { variables.add(id.image); codigoIntermedio.add("READ " + id.image); }
+    <ACCEPT> id=<ID> { variables.add(id.image); codigoIntermedio.add("READ " + id.image); }
     |
-    <MUESTRA> literal() ( <COMA> literal() )*
+    <DISPLAY> literal() ( <COMA> literal() )*
   )
 }
 
@@ -170,7 +170,9 @@ void literal() : {} {
     |
     <NUM> { codigoIntermedio.add("PRINT " + token.image); }
     |
-    <CAD> { codigoIntermedio.add("PRINT " + token.image); }
+    <CAD_DOBLE> { codigoIntermedio.add("PRINT " + token.image); }
+    |
+    <CAD_SIMPLE> { codigoIntermedio.add("PRINT " + token.image); }
   )
 }
 
