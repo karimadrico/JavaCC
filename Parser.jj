@@ -7,101 +7,72 @@ import java.util.*;
 import java.io.*;
 
 public class CobolCompiler {
-  // Estructura para registrar variables usadas
-  private Set<String> variables = new HashSet<>();
-  // Lista para almacenar el código intermedio generado
+
   private List<String> codigoIntermedio = new ArrayList<>();
-  
-  // Contadores para generación de código intermedio
-  private int contadorTemporales = 1;
   private int contadorEtiquetas = 0;
-  
-  // Genera un nuevo nombre de variable temporal
-  private String nuevaTemporal() {
-    return "t" + (contadorTemporales++);
-  }
-  
-  // Genera un nuevo nombre de etiqueta
+
   private String nuevaEtiqueta() {
     return "LBL" + (contadorEtiquetas++);
   }
-  
-  // Agrega una línea de código intermedio con indentación
-  private void agregarCodigo(String codigo) {
-    codigoIntermedio.add("    " + codigo);
+
+  private void agregarCodigo(String c) {
+    codigoIntermedio.add("    " + c);
   }
-  
-  // Obtiene el valor de una expresión (puede ser temporal, variable o constante)
-  private String obtenerValor(String valor) {
-    // Si es un número o cadena, lo devuelve tal cual
-    if (valor.matches("\\d+(\\.\\d+)?([eE][+-]?\\d+)?") || 
-        valor.startsWith("\"") || valor.startsWith("'")) {
-      return valor;
+
+  static class BooleanResult {
+    String e1, e2, op;
+    boolean negado;
+
+    BooleanResult(String e1, String e2, String op, boolean n) {
+      this.e1 = e1;
+      this.e2 = e2;
+      this.op = op;
+      this.negado = n;
     }
-    // Si es una variable, la registra y la devuelve
-    if (!valor.startsWith("t") || !valor.matches("t\\d+")) {
-      variables.add(valor);
+  }
+
+  private void generarSalto(BooleanResult br, String etiquetaFalsa) {
+    String op = br.op;
+
+    if (br.negado) {
+      if (op.equals(">")) op = "<=";
+      else if (op.equals("<")) op = ">=";
+      else if (op.equals("==")) op = "!=";
     }
-    return valor;
+
+    agregarCodigo("if " + br.e1 + " " + op + " " + br.e2 + " goto " + etiquetaFalsa);
   }
 
   public static void main(String[] args) throws Exception {
-    System.out.println("Starting...");
-    InputStream input;
-    String nombreArchivo = null;
-    if (args.length > 0) {
-      nombreArchivo = args[0];
-      input = new FileInputStream(nombreArchivo);
-      System.out.println("Reading from file " + nombreArchivo + " . . .");
-    } else {
-      input = System.in;
-      System.out.println("Reading from standard input . . .");
-    }
-    CobolCompiler parser = new CobolCompiler(input);
-    parser.programa();
-    // Imprimir código intermedio generado
-    for (String linea : parser.codigoIntermedio) {
-      System.out.println(linea);
-    }
+    InputStream in = (args.length > 0) ? new FileInputStream(args[0]) : System.in;
+    CobolCompiler p = new CobolCompiler(in);
+    p.programa();
+    for (String s : p.codigoIntermedio) System.out.println(s);
     System.out.println("Program parsed successfully.");
   }
 }
 PARSER_END(CobolCompiler)
 
-/* -------------------- COMENTARIO COBOL línea completa (asterisco en columna 7) -------------------- */
-SKIP :
-{
-  "\n" " " " " " " " " " " " " "*" (~["\r","\n"])*
+/* ===================== SKIP ===================== */
+
+SKIP : { " " | "\t" | "\r" | "\n" }
+
+SKIP : {
+  < COMMENT_LINE : "\n" " " " " " " " " " " " " "*" (~["\n","\r"])* >
 }
 
-/* -------------------- COMENTARIO COBOL *> -------------------- */
-SKIP :
-{
+SKIP : {
   < COMMENT : "*>"
-    (~["\r","\n"])* >
+    (~["\n","\r"])* >
 }
 
-/* -------------------- ESPACIOS -------------------- */
-SKIP :
-{
-  " " | "\t" | "\r" | "\n"
-}
+/* ===================== TOKENS ===================== */
 
-/* -------------------- TOKENS -------------------- */
 TOKEN : { < DOT: "." > }
 
-// Palabras reservadas principales
 TOKEN : { < PROGRAM: "PROGRAM" > }
 TOKEN : { < BEGIN: "BEGIN" > }
 TOKEN : { < END: "END" > }
-TOKEN : { < ACCEPT: "ACCEPT" > }
-TOKEN : { < DISPLAY: "DISPLAY" > }
-TOKEN : { < MOVE: "MOVE" > }
-TOKEN : { < ADD: "ADD" > }
-TOKEN : { < SUBTRACT: "SUBTRACT" > }
-TOKEN : { < MULTIPLY: "MULTIPLY" > }
-TOKEN : { < DIVIDE: "DIVIDE" > }
-TOKEN : { < GIVING: "GIVING" > }
 TOKEN : { < IF: "IF" > }
 TOKEN : { < THEN: "THEN" > }
 TOKEN : { < ELSE: "ELSE" > }
@@ -118,30 +89,13 @@ TOKEN : { < LESS: "LESS" > }
 TOKEN : { < EQUAL: "EQUAL" > }
 TOKEN : { < THAN: "THAN" > }
 
-// Operadores y puntuación
-TOKEN : { < COMA: "," > }
-TOKEN : { < MAS: "+" > }
-TOKEN : { < MENOS: "-" > }
-TOKEN : { < POR_OP: "*" > }
-TOKEN : { < DIV_OP: "/" > }
-TOKEN : { < PARENOPEN: "(" > }
-TOKEN : { < PARENCLOSE: ")" > }
-TOKEN : { < IGUAL_OP: "=" > }
-
-// Identificadores, números y cadenas
 TOKEN : {
-  < ID:
-    (["A"-"Z"])
-    (["A"-"Z","0"-"9","-"])*
-    (["A"-"Z","0"-"9"])
-  | (["A"-"Z"])
-  >
-  | < NUM: (["0"-"9"])+ ("." (["0"-"9"])+)? (["e","E"] (["+","-"])? (["0"-"9"])+)? >
-  | < CAD_DOBLE: "\"" (~["\""])* "\"" >
-  | < CAD_SIMPLE: "'" (~["'"])* "'" >
+  < ID: (["A"-"Z"])(["A"-"Z","0"-"9","-"])* >
+| < NUM: (["0"-"9"])+ >
 }
 
-/* -------------------- GRAMÁTICA -------------------- */
+/* ===================== GRAMÁTICA ===================== */
+
 void programa() : {} {
   <PROGRAM> <ID> <DOT>
   <BEGIN>
@@ -154,181 +108,99 @@ void sentencias() : {} {
 }
 
 void sentencia() : {} {
-  ( bucle() <DOT>
-  | condicional() <DOT>
-  | asignacion() <DOT>
-  | io() <DOT>
+  ( condicional() <DOT>
+  | bucle() <DOT>
   )
 }
 
-void bucle() : {} {
-  (
-    <WHILE> booleanExpr() <DO> sentencias() <END>
-    |
-    <VARYING> <ID> 
-    (
-      <FROM> atomic() <TO> atomic() (<BY> atomic() <DO> sentencias() <END> | <DO> sentencias() <END>)
-      |
-      <TO> atomic() (<BY> atomic() <DO> sentencias() <END> | <DO> sentencias() <END>)
-    )
-  )
-}
-
-void condicional() : {} {
-  <IF> booleanExpr() <THEN> sentencias() (<ELSE> sentencias())? <END>
-}
-
-void asignacion() : {
-  String exprResult, expr1, expr2;
-  Token varId;
+void condicional() : {
+  BooleanResult br;
+  String lblElse, lblFin;
 } {
+  <IF> br=booleanExpr() <THEN>
+  {
+    lblElse = nuevaEtiqueta();
+    lblFin = nuevaEtiqueta();
+    generarSalto(br, lblElse);
+  }
+  sentencias()
+  {
+    agregarCodigo("goto " + lblFin);
+    agregarCodigo(lblElse + ":");
+  }
   (
-    <MOVE> exprResult=expr() <TO> varId=<ID>
-    {
-      variables.add(varId.image);
-      agregarCodigo(varId.image + " := " + exprResult);
-    }
+    <ELSE> sentencias()
     |
-    <ADD> exprResult=expr() <TO> varId=<ID>
-    {
-      variables.add(varId.image);
-      agregarCodigo(varId.image + " := " + varId.image + " + " + exprResult);
-    }
-    |
-    <SUBTRACT> exprResult=expr() <FROM> varId=<ID>
-    {
-      variables.add(varId.image);
-      agregarCodigo(varId.image + " := " + varId.image + " - " + exprResult);
-    }
-    |
-    <MULTIPLY> expr1=expr() <BY> expr2=expr() <GIVING> varId=<ID>
-    {
-      variables.add(varId.image);
-      agregarCodigo(varId.image + " := " + expr1 + " * " + expr2);
-    }
-    |
-    <DIVIDE> expr1=expr() <BY> expr2=expr() <GIVING> varId=<ID>
-    {
-      variables.add(varId.image);
-      agregarCodigo(varId.image + " := " + expr1 + " / " + expr2);
-    }
+    {}
   )
+  {
+    agregarCodigo(lblFin + ":");
+  }
+  <END>
 }
 
-void io() : {
+void bucle() : {
+  BooleanResult br;
+  String lblIni, lblFin;
   Token id;
+  String fin;
 } {
   (
-    <ACCEPT> id=<ID> { 
-      variables.add(id.image); 
-      agregarCodigo("lee " + id.image); 
-    }
-    |
-    <DISPLAY> literal() ( <COMA> literal() )*
-  )
-}
-
-void literal() : {} {
-  (
-    <ID> { 
-      variables.add(token.image); 
-      agregarCodigo("print " + token.image); 
-    }
-    |
-    <NUM> { agregarCodigo("print " + token.image); }
-    |
-    <CAD_DOBLE> { agregarCodigo("print " + token.image); }
-    |
-    <CAD_SIMPLE> { agregarCodigo("print " + token.image); }
-  )
-}
-
-String atomic() : {
-  String resultado;
-  Token id, num;
-} {
-  (
-    id=<ID> { 
-      variables.add(id.image); 
-      resultado = id.image; 
-    }
-    |
-    num=<NUM> { resultado = num.image; }
-  )
-  { return resultado; }
-}
-
-String expr() : {
-  String resultado, temp, op;
-} {
-  resultado = mult()
-  (
-    (
-      <MAS> { op = "+"; }
-      |
-      <MENOS> { op = "-"; }
-    )
-    temp = mult()
+    <WHILE>
     {
-      String nuevaTemp = nuevaTemporal();
-      agregarCodigo(nuevaTemp + " := " + resultado + " " + op + " " + temp);
-      resultado = nuevaTemp;
+      lblIni = nuevaEtiqueta();
+      lblFin = nuevaEtiqueta();
+      agregarCodigo(lblIni + ":");
     }
-  )*
-  { return resultado; }
-}
-
-String mult() : {
-  String resultado, temp, op;
-} {
-  resultado = val()
-  (
-    (
-      <POR_OP> { op = "*"; }
-      |
-      <DIV_OP> { op = "/"; }
-    )
-    temp = val()
+    br=booleanExpr() <DO>
     {
-      String nuevaTemp = nuevaTemporal();
-      agregarCodigo(nuevaTemp + " := " + resultado + " " + op + " " + temp);
-      resultado = nuevaTemp;
+      generarSalto(br, lblFin);
     }
-  )*
-  { return resultado; }
+    sentencias() <END>
+    {
+      agregarCodigo("goto " + lblIni);
+      agregarCodigo(lblFin + ":");
+    }
+    |
+    <VARYING> id=<ID> <TO> fin=valor() <DO>
+    {
+      lblIni = nuevaEtiqueta();
+      lblFin = nuevaEtiqueta();
+      agregarCodigo(id.image + " := 1");
+      agregarCodigo(lblIni + ":");
+      agregarCodigo("if " + id.image + " > " + fin + " goto " + lblFin);
+    }
+    sentencias() <END>
+    {
+      agregarCodigo(id.image + " := " + id.image + " + 1");
+      agregarCodigo("goto " + lblIni);
+      agregarCodigo(lblFin + ":");
+    }
+  )
 }
 
-String val() : {
-  String resultado;
-  Token id, num;
+String valor() : { Token t; } {
+  ( t=<ID> | t=<NUM> )
+  { return t.image; }
+}
+
+BooleanResult booleanExpr() : {
+  String e1, e2, op;
+  boolean neg = false;
 } {
+  e1=valor() <IS>
   (
-    id=<ID> { 
-      variables.add(id.image); 
-      resultado = id.image; 
-    }
+    <NOT> { neg = true; }
+    ( <GREATER> <THAN> { op = ">"; }
+    | <LESS> <THAN> { op = "<"; }
+    | <EQUAL> <TO> { op = "=="; } )
     |
-    num=<NUM> { resultado = num.image; }
-    |
-    <PARENOPEN> resultado=expr() <PARENCLOSE>
+    <GREATER> <THAN> { op = ">"; }
+    | <LESS> <THAN> { op = "<"; }
+    | <EQUAL> <TO> { op = "=="; }
   )
-  { return resultado; }
-}
-
-void booleanExpr() : {} {
-  expr() <IS> (
-    <NOT> (
-      <GREATER> <THAN> expr()
-      |
-      <LESS> <THAN> expr()
-      |
-      <EQUAL> <TO> expr()
-    )
-    |
-    <GREATER> <THAN> expr()
-    |
-    <LESS> <THAN> expr()
-    |
-    <EQUAL> <TO> expr()
-  )
+  e2=valor()
+  {
+    return new BooleanResult(e1, e2, op, neg);
+  }
 }
