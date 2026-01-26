@@ -82,20 +82,33 @@ PARSER_END(CobolCompiler)
 /* ================= COMENTARIOS ================= */
 
 /* Comentario de línea completa: asterisco en columna 7 */
-SKIP :
+TOKEN :
 {
-  < ("\n" | "\r\n") " " " " " " " " " " " "*" (~["\n","\r"])* >
+  < COMMENT_LINE:
+      ("\n" | "\r\n")
+      " " " " " " " " " "
+      "*"
+      (~["\n","\r"])* >
 }
 
-/* Comentarios en línea que empiezan por *> */
+/* --- Ignorar comentarios --- */
+SKIP :
+{
+  < COMMENT_LINE >
+}
+
+/* --- Comentarios en línea con *> --- */
 SKIP :
 {
   < "*>"
     (~["\n","\r"])* >
 }
 
-/* Espacios en blanco */
-SKIP : { " " | "\t" | "\n" | "\r" }
+/* --- Espacios en blanco --- */
+SKIP :
+{
+  " " | "\t" | "\n" | "\r"
+}
 
 /* ================= TOKENS ================= */
 
