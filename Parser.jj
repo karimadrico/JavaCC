@@ -9,32 +9,22 @@ import java.io.*;
 
 public class CobolCompiler {
 
-  // Aquí guardo las variables que van apareciendo
-  private Set<String> variables = new HashSet<>();
-
-  // Lista donde se va almacenando el código intermedio
   private List<String> codigo = new ArrayList<>();
-
-  // Contadores para temporales y etiquetas
   private int tempCount = 1;
   private int labelCount = 0;
 
-  // Genera una nueva variable temporal
   private String nuevaTemp() {
     return "t" + (tempCount++);
   }
 
-  // Genera una nueva etiqueta
   private String nuevaEtiqueta() {
     return "L" + (labelCount++);
   }
 
-  // Añade una línea al código intermedio
   private void emit(String s) {
     codigo.add("    " + s);
   }
 
-  // Clase auxiliar para manejar expresiones booleanas
   static class BooleanResult {
     String e1, e2, op;
     boolean negated;
@@ -47,8 +37,7 @@ public class CobolCompiler {
     }
   }
 
-  // Genera el salto cuando la condición es falsa
-  private void saltoFalso(BooleanResult br, String etiquetaFalsa) {
+  private void saltoFalso(BooleanResult br, String etq) {
     String op = br.op;
 
     if (br.negated) {
@@ -57,14 +46,7 @@ public class CobolCompiler {
       else if (op.equals("==")) op = "!=";
     }
 
-    String opNeg;
-    if (op.equals(">")) opNeg = "<=";
-    else if (op.equals("<")) opNeg = ">=";
-    else if (op.equals("==")) opNeg = "!=";
-    else if (op.equals("!=")) opNeg = "==";
-    else opNeg = op;
-
-    emit("if " + br.e1 + " " + opNeg + " " + br.e2 + " goto " + etiquetaFalsa);
+    emit("if " + br.e1 + " " + op + " " + br.e2 + " goto " + etq);
   }
 
   public static void main(String[] args) throws Exception {
@@ -72,36 +54,32 @@ public class CobolCompiler {
         ? new FileInputStream(args[0])
         : System.in;
 
-    CobolCompiler parser = new CobolCompiler(in);
-    parser.program();
+    CobolCompiler p = new CobolCompiler(in);
+    p.program();
 
-    for (String s : parser.codigo) {
+    for (String s : p.codigo)
       System.out.println(s);
-    }
   }
 }
 
 PARSER_END(CobolCompiler)
 
-// ===================== COMENTARIOS COBOL =====================
+// ================= COMENTARIOS =================
 
-// Comentario que empieza con * en cualquier posición
 SKIP :
 {
   < "*" (~["\n","\r"])* >
 }
 
-// Comentario tipo *>
 SKIP :
 {
   < "*>"
     (~["\n","\r"])* >
 }
 
-// Espacios en blanco
 SKIP : { " " | "\t" | "\n" | "\r" }
 
-// ===================== TOKENS =====================
+// ================= TOKENS =================
 
 TOKEN : { < DOT: "." > }
 
@@ -113,10 +91,6 @@ TOKEN : { < THEN: "THEN" > }
 TOKEN : { < ELSE: "ELSE" > }
 TOKEN : { < WHILE: "WHILE" > }
 TOKEN : { < DO: "DO" > }
-TOKEN : { < VARYING: "VARYING" > }
-TOKEN : { < FROM: "FROM" > }
-TOKEN : { < TO: "TO" > }
-TOKEN : { < BY: "BY" > }
 TOKEN : { < IS: "IS" > }
 TOKEN : { < NOT: "NOT" > }
 TOKEN : { < GREATER: "GREATER" > }
@@ -125,16 +99,11 @@ TOKEN : { < EQUAL: "EQUAL" > }
 TOKEN : { < THAN: "THAN" > }
 
 TOKEN : { < MOVE: "MOVE" > }
-TOKEN : { < ACCEPT: "ACCEPT" > }
 TOKEN : { < DISPLAY: "DISPLAY" > }
+TOKEN : { < ACCEPT: "ACCEPT" > }
 
 TOKEN : { < MAS: "+" > }
 TOKEN : { < MENOS: "-" > }
-TOKEN : { < POR: "*" > }
-TOKEN : { < DIV: "/" > }
-TOKEN : { < PA: "(" > }
-TOKEN : { < PC: ")" > }
-TOKEN : { < COMA: "," > }
 
 TOKEN :
 {
@@ -143,7 +112,7 @@ TOKEN :
 | < CAD: "\"" (~["\""])* "\"" | "'" (~["'"])* "'" >
 }
 
-// ===================== GRAMÁTICA =====================
+// ================= GRAMÁTICA =================
 
 void program() : {}
 {
@@ -160,14 +129,40 @@ void stmts() : {}
 
 void stmt() : {}
 {
-  ( loop() <DOT>
-  | cond() <DOT>
+  ( cond() <DOT>
+  | loop() <DOT>
   | assig() <DOT>
   | io() <DOT>
   )
 }
 
-// --------- WHILE ---------
+// -------- IF --------
+
+void cond() :
+{
+  BooleanResult br;
+  String lElse, lFin;
+}
+{
+  <IF> br=booleanExpr() <THEN>
+  {
+    lElse = nuevaEtiqueta();
+    lFin  = nuevaEtiqueta();
+    saltoFalso(br, lElse);
+  }
+  stmts()
+  {
+    emit("goto " + lFin);
+    emit(lElse + ":");
+  }
+  ( <ELSE> stmts() )?
+  <END>
+  {
+    emit(lFin + ":");
+  }
+}
+
+// -------- WHILE --------
 
 void loop() :
 {
@@ -193,48 +188,29 @@ void loop() :
   }
 }
 
-// --------- IF ---------
-
-void cond() :
-{
-  BooleanResult br;
-  String lElse, lFin;
-}
-{
-  <IF> br=booleanExpr() <THEN>
-  {
-    lElse = nuevaEtiqueta();
-    lFin = nuevaEtiqueta();
-    saltoFalso(br, lElse);
-  }
-  stmts()
-  {
-    emit("goto " + lFin);
-    emit(lElse + ":");
-  }
-  ( <ELSE> stmts() )?
-  <END>
-  {
-    emit(lFin + ":");
-  }
-}
-
-// --------- ASIGNACIÓN ---------
+// -------- ASIGNACIÓN --------
 
 void assig() : {}
 {
   <MOVE> expr() <TO> <ID>
 }
 
-// --------- ENTRADA / SALIDA ---------
+// -------- IO --------
 
 void io() : {}
 {
-  <DISPLAY> literal() ( <COMA> literal() )*
+  <DISPLAY> literal()
 | <ACCEPT> <ID>
 }
 
-// --------- EXPRESIONES ---------
+// -------- LITERAL --------
+
+void literal() : {}
+{
+  <ID> | <NUM> | <CAD>
+}
+
+// -------- EXPRESIONES --------
 
 String expr() :
 {
@@ -258,26 +234,25 @@ String val() :
 {
   t=<ID> { return t.image; }
 | t=<NUM> { return t.image; }
-| <PA> expr() <PC>
 }
 
-// --------- BOOLEANEXPR ---------
+// -------- BOOLEAN --------
 
 BooleanResult booleanExpr() :
 {
   String e1, e2, op;
-  boolean neg = false;
+  boolean neg=false;
 }
 {
   e1=expr() <IS>
-  ( <NOT> { neg = true; } )?
+  ( <NOT> { neg=true; } )?
   (
-    <GREATER> <THAN> { op = ">"; }
-  | <LESS> <THAN> { op = "<"; }
-  | <EQUAL> <TO> { op = "=="; }
+    <GREATER> <THAN> { op=">"; }
+  | <LESS> <THAN> { op="<"; }
+  | <EQUAL> <TO> { op="=="; }
   )
   e2=expr()
   {
-    return new BooleanResult(e1, e2, op, neg);
+    return new BooleanResult(e1,e2,op,neg);
   }
 }
