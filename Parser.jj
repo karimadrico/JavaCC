@@ -19,35 +19,48 @@ public class CobolCompiler {
     codigoIntermedio.add("    " + c);
   }
 
+  /*  booleanExpr devuelve información estructurada */
   static class BooleanResult {
-    String e1, e2, op;
+    String expr1;
+    String expr2;
+    String op;
     boolean negado;
 
-    BooleanResult(String e1, String e2, String op, boolean n) {
-      this.e1 = e1;
-      this.e2 = e2;
-      this.op = op;
-      this.negado = n;
+    BooleanResult(String e1, String e2, String o, boolean n) {
+      expr1 = e1;
+      expr2 = e2;
+      op = o;
+      negado = n;
     }
   }
 
-  private void generarSalto(BooleanResult br, String etiquetaFalsa) {
-    String op = br.op;
+  /* Usa la información devuelta por booleanExpr */
+  private void generarSaltoFalso(BooleanResult br, String etiquetaFalsa) {
+    String opReal = br.op;
 
     if (br.negado) {
-      if (op.equals(">")) op = "<=";
-      else if (op.equals("<")) op = ">=";
-      else if (op.equals("==")) op = "!=";
+      if (opReal.equals(">")) opReal = "<=";
+      else if (opReal.equals("<")) opReal = ">=";
+      else if (opReal.equals("==")) opReal = "!=";
     }
 
-    agregarCodigo("if " + br.e1 + " " + op + " " + br.e2 + " goto " + etiquetaFalsa);
+    agregarCodigo(
+      "if " + br.expr1 + " " + opReal + " " + br.expr2 +
+      " goto " + etiquetaFalsa
+    );
   }
 
   public static void main(String[] args) throws Exception {
-    InputStream in = (args.length > 0) ? new FileInputStream(args[0]) : System.in;
-    CobolCompiler p = new CobolCompiler(in);
-    p.programa();
-    for (String s : p.codigoIntermedio) System.out.println(s);
+    InputStream in = (args.length > 0)
+        ? new FileInputStream(args[0])
+        : System.in;
+
+    CobolCompiler parser = new CobolCompiler(in);
+    parser.programa();
+
+    for (String s : parser.codigoIntermedio)
+      System.out.println(s);
+
     System.out.println("Program parsed successfully.");
   }
 }
@@ -58,7 +71,8 @@ PARSER_END(CobolCompiler)
 SKIP : { " " | "\t" | "\r" | "\n" }
 
 SKIP : {
-  < COMMENT_LINE : "\n" " " " " " " " " " " " " "*" (~["\n","\r"])* >
+  < COMMENT_LINE :
+    "\n" " " " " " " " " " " " " "*" (~["\n","\r"])* >
 }
 
 SKIP : {
@@ -79,9 +93,7 @@ TOKEN : { < ELSE: "ELSE" > }
 TOKEN : { < WHILE: "WHILE" > }
 TOKEN : { < DO: "DO" > }
 TOKEN : { < VARYING: "VARYING" > }
-TOKEN : { < FROM: "FROM" > }
 TOKEN : { < TO: "TO" > }
-TOKEN : { < BY: "BY" > }
 TOKEN : { < IS: "IS" > }
 TOKEN : { < NOT: "NOT" > }
 TOKEN : { < GREATER: "GREATER" > }
@@ -113,6 +125,8 @@ void sentencia() : {} {
   )
 }
 
+/* ---------------- IF / THEN / ELSE ---------------- */
+
 void condicional() : {
   BooleanResult br;
   String lblElse, lblFin;
@@ -121,7 +135,7 @@ void condicional() : {
   {
     lblElse = nuevaEtiqueta();
     lblFin = nuevaEtiqueta();
-    generarSalto(br, lblElse);
+    generarSaltoFalso(br, lblElse);
   }
   sentencias()
   {
@@ -139,6 +153,8 @@ void condicional() : {
   <END>
 }
 
+/* ---------------- WHILE y VARYING ---------------- */
+
 void bucle() : {
   BooleanResult br;
   String lblIni, lblFin;
@@ -154,7 +170,7 @@ void bucle() : {
     }
     br=booleanExpr() <DO>
     {
-      generarSalto(br, lblFin);
+      generarSaltoFalso(br, lblFin);
     }
     sentencias() <END>
     {
@@ -179,10 +195,16 @@ void bucle() : {
   )
 }
 
-String valor() : { Token t; } {
+/* ---------------- Valores simples ---------------- */
+
+String valor() : {
+  Token t;
+} {
   ( t=<ID> | t=<NUM> )
   { return t.image; }
 }
+
+/* ---------------- BooleanExpr ---------------- */
 
 BooleanResult booleanExpr() : {
   String e1, e2, op;
@@ -191,9 +213,11 @@ BooleanResult booleanExpr() : {
   e1=valor() <IS>
   (
     <NOT> { neg = true; }
-    ( <GREATER> <THAN> { op = ">"; }
-    | <LESS> <THAN> { op = "<"; }
-    | <EQUAL> <TO> { op = "=="; } )
+    (
+      <GREATER> <THAN> { op = ">"; }
+      | <LESS> <THAN> { op = "<"; }
+      | <EQUAL> <TO> { op = "=="; }
+    )
     |
     <GREATER> <THAN> { op = ">"; }
     | <LESS> <THAN> { op = "<"; }
