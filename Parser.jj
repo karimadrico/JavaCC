@@ -9,29 +9,32 @@ import java.io.*;
 
 public class CobolCompiler {
 
-  /* Variables usadas en el programa */
+  /* Guardamos las variables usadas (informativo) */
   private Set<String> variables = new HashSet<>();
 
-  /* Código intermedio generado */
+  /* Código intermedio en tres direcciones */
   private List<String> codigo = new ArrayList<>();
 
   /* Contadores para temporales y etiquetas */
   private int tempCount = 1;
   private int labelCount = 0;
 
+  /* Genera un nuevo temporal */
   private String nuevaTemp() {
     return "t" + (tempCount++);
   }
 
+  /* Genera una nueva etiqueta */
   private String nuevaEtiqueta() {
     return "L" + (labelCount++);
   }
 
+  /* Añade una línea de código intermedio */
   private void emit(String s) {
     codigo.add("    " + s);
   }
 
-  /* Resultado de una expresión booleana */
+  /* Clase auxiliar para expresiones booleanas */
   static class BooleanResult {
     String e1, e2, op;
     boolean negated;
@@ -44,7 +47,7 @@ public class CobolCompiler {
     }
   }
 
-  /* Salto cuando la condición es falsa */
+  /* Genera el salto cuando la condición es falsa */
   private void saltoFalso(BooleanResult br, String etiquetaFalsa) {
     String op = br.op;
 
@@ -58,8 +61,7 @@ public class CobolCompiler {
     if (op.equals(">")) opNeg = "<=";
     else if (op.equals("<")) opNeg = ">=";
     else if (op.equals("==")) opNeg = "!=";
-    else if (op.equals("!=")) opNeg = "==";
-    else opNeg = op;
+    else opNeg = "==";
 
     emit("if " + br.e1 + " " + opNeg + " " + br.e2 + " goto " + etiquetaFalsa);
   }
@@ -76,31 +78,22 @@ public class CobolCompiler {
 
 PARSER_END(CobolCompiler)
 
-/* ================== SKIP ================== */
+/* ===================== SKIP ===================== */
 
-/* Comentarios COBOL: asterisco en columna 7 */
-SKIP :
-{
-  ("\n" | "\r\n")
-  " " " " " " " " " "
-  "*"
-  (~["\n","\r"])*
-}
-
-/* Comentarios *> */
+/* Comentarios en línea *> */
 SKIP :
 {
   "*>"
-  (~["\n","\r"])*
+  (~["\n","\r"])* 
 }
 
-/* Espacios en blanco */
+/* Espacios */
 SKIP :
 {
   " " | "\t" | "\n" | "\r"
 }
 
-/* ================== TOKENS ================== */
+/* ===================== TOKENS ===================== */
 
 TOKEN : { < DOT: "." > }
 
@@ -128,6 +121,12 @@ TOKEN : { < EQUAL: "EQUAL" > }
 TOKEN : { < THAN: "THAN" > }
 
 TOKEN : { < MOVE: "MOVE" > }
+TOKEN : { < ADD: "ADD" > }
+TOKEN : { < SUBTRACT: "SUBTRACT" > }
+TOKEN : { < MULTIPLY: "MULTIPLY" > }
+TOKEN : { < DIVIDE: "DIVIDE" > }
+TOKEN : { < GIVING: "GIVING" > }
+
 TOKEN : { < ACCEPT: "ACCEPT" > }
 TOKEN : { < DISPLAY: "DISPLAY" > }
 
@@ -141,7 +140,7 @@ TOKEN :
 | < CAD: "\"" (~["\""])* "\"" | "'" (~["'"])* "'" >
 }
 
-/* ================== GRAMÁTICA ================== */
+/* ===================== GRAMÁTICA ===================== */
 
 void program() : {}
 {
@@ -164,7 +163,7 @@ void stmt() : {}
   | io() <DOT>
 }
 
-/* --------- BUCLES (Punto 4 y 5) --------- */
+/* ---------- BUCLES ---------- */
 
 void loop() :
 {
@@ -197,15 +196,9 @@ void loop() :
     lIni = nuevaEtiqueta();
     lFin = nuevaEtiqueta();
   }
-  (
-    <FROM> ini=atomic()
-    | { ini = "1"; }
-  )
+  ( <FROM> ini=atomic() | { ini = "1"; } )
   <TO> fin=atomic()
-  (
-    <BY> paso=atomic()
-    | { paso = "1"; }
-  )
+  ( <BY> paso=atomic() | { paso = "1"; } )
   <DO>
   {
     emit(id.image + " := " + ini);
@@ -221,7 +214,7 @@ void loop() :
   }
 }
 
-/* --------- CONDICIONAL (Punto 3) --------- */
+/* ---------- CONDICIONAL ---------- */
 
 void cond() :
 {
@@ -247,15 +240,68 @@ void cond() :
   }
 }
 
-/* --------- ASIGNACIÓN e IO --------- */
+/* ---------- ASIGNACIONES ---------- */
 
-void assig() : {} { <MOVE> expr() <TO> <ID> }
+void assig() :
+{
+  String e1, e2, t;
+  Token id;
+}
+{
+  <MOVE> e1=expr() <TO> id=<ID>
+  {
+    emit(id.image + " := " + e1);
+  }
+| <ADD> e1=expr() <TO> id=<ID>
+  {
+    t = nuevaTemp();
+    emit(t + " := " + id.image + " + " + e1);
+    emit(id.image + " := " + t);
+  }
+| <SUBTRACT> e1=expr() <FROM> id=<ID>
+  {
+    t = nuevaTemp();
+    emit(t + " := " + id.image + " - " + e1);
+    emit(id.image + " := " + t);
+  }
+| <MULTIPLY> e1=expr() <BY> e2=expr() <GIVING> id=<ID>
+  {
+    t = nuevaTemp();
+    emit(t + " := " + e1 + " * " + e2);
+    emit(id.image + " := " + t);
+  }
+| <DIVIDE> e1=expr() <BY> e2=expr() <GIVING> id=<ID>
+  {
+    t = nuevaTemp();
+    emit(t + " := " + e1 + " / " + e2);
+    emit(id.image + " := " + t);
+  }
+}
 
-void io() : {} { <DISPLAY> literal() | <ACCEPT> <ID> }
+/* ---------- IO ---------- */
 
-void literal() : {} { <ID> | <NUM> | <CAD> }
+void io() :
+{
+  String l;
+}
+{
+  <DISPLAY> l=literal()
+  {
+    emit("print " + l);
+  }
+| <ACCEPT> <ID>
+}
 
-/* --------- EXPRESIONES --------- */
+/* ---------- EXPRESIONES ---------- */
+
+String literal() :
+{
+  Token t;
+}
+{
+  ( t=<ID> | t=<NUM> | t=<CAD> )
+  { return t.image; }
+}
 
 String atomic() :
 {
@@ -268,24 +314,64 @@ String atomic() :
 
 String expr() :
 {
-  String s;
+  String a, b, t;
 }
 {
-  s=mult() { return s; }
+  a=mult()
+  (
+    "+" b=mult()
+    {
+      t = nuevaTemp();
+      emit(t + " := " + a + " + " + b);
+      a = t;
+    }
+  |
+    "-" b=mult()
+    {
+      t = nuevaTemp();
+      emit(t + " := " + a + " - " + b);
+      a = t;
+    }
+  )*
+  { return a; }
 }
 
 String mult() :
+{
+  String a, b, t;
+}
+{
+  a=val()
+  (
+    "*" b=val()
+    {
+      t = nuevaTemp();
+      emit(t + " := " + a + " * " + b);
+      a = t;
+    }
+  |
+    "/" b=val()
+    {
+      t = nuevaTemp();
+      emit(t + " := " + a + " / " + b);
+      a = t;
+    }
+  )*
+  { return a; }
+}
+
+String val() :
 {
   Token t;
   String e;
 }
 {
-    t=<ID>  { return t.image; }
-  | t=<NUM> { return t.image; }
+    t=<NUM> { return t.image; }
+  | t=<ID>  { return t.image; }
   | <PA> e=expr() <PC> { return e; }
 }
 
-/* --------- BOOLEANEXPR (Punto 2) --------- */
+/* ---------- BOOLEANEXPR ---------- */
 
 BooleanResult booleanExpr() :
 {
