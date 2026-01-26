@@ -71,7 +71,7 @@ PARSER_END(CobolCompiler)
 /* -------------------- COMENTARIO COBOL línea completa (asterisco en columna 7) -------------------- */
 SKIP :
 {
-  < COMMENT_LINE : "\n" (" ") (" ") (" ") (" ") (" ") (" ") "*" (~["\r","\n"])* >
+  < COMMENT_LINE : "\n" " " " " " " " " " " " " "*" (~["\r","\n"])* >
 }
 
 /* -------------------- COMENTARIO COBOL *> -------------------- */
@@ -84,7 +84,13 @@ SKIP :
 /* -------------------- ESPACIOS -------------------- */
 SKIP :
 {
-  " " | "\t" | "\r" | "\n"
+  " " | "\t" | "\r"
+}
+
+/* -------------------- SALTO DE LÍNEA -------------------- */
+SKIP :
+{
+  "\n"
 }
 
 /* -------------------- TOKENS -------------------- */
@@ -220,44 +226,92 @@ void literal() : {} {
   )
 }
 
-void atomic() : {} {
+String atomic() : {
+  String resultado;
+  Token id;
+} {
   (
-    <ID> { variables.add(token.image); }
+    id=<ID> { 
+      variables.add(id.image); 
+      resultado = id.image; 
+    }
     |
-    <NUM>
+    resultado=<NUM> { resultado = token.image; }
   )
+  { return resultado; }
 }
 
-void expr() : {} {
-  mult() ( (<MAS> | <MENOS>) mult() )*
-}
-
-void mult() : {} {
-  val() ( (<POR_OP> | <DIV_OP>) val() )*
-}
-
-void val() : {} {
+String expr() : {
+  String resultado, temp, op;
+} {
+  resultado = mult()
   (
-    <ID> { variables.add(token.image); }
+    (
+      <MAS> { op = "+"; }
+      |
+      <MENOS> { op = "-"; }
+    )
+    temp = mult()
+    {
+      String nuevaTemp = nuevaTemporal();
+      agregarCodigo(nuevaTemp + " := " + resultado + " " + op + " " + temp);
+      resultado = nuevaTemp;
+    }
+  )*
+  { return resultado; }
+}
+
+String mult() : {
+  String resultado, temp, op;
+} {
+  resultado = val()
+  (
+    (
+      <POR_OP> { op = "*"; }
+      |
+      <DIV_OP> { op = "/"; }
+    )
+    temp = val()
+    {
+      String nuevaTemp = nuevaTemporal();
+      agregarCodigo(nuevaTemp + " := " + resultado + " " + op + " " + temp);
+      resultado = nuevaTemp;
+    }
+  )*
+  { return resultado; }
+}
+
+String val() : {
+  String resultado;
+  Token id;
+} {
+  (
+    id=<ID> { 
+      variables.add(id.image); 
+      resultado = id.image; 
+    }
     |
-    <NUM>
+    resultado=<NUM> { resultado = token.image; }
     |
-    <PARENOPEN> expr() <PARENCLOSE>
+    <PARENOPEN> resultado=expr() <PARENCLOSE>
   )
+  { return resultado; }
 }
 
 void booleanExpr() : {} {
-  (
-    expr() <IS> <GREATER> <THAN> expr()
+  expr() <IS> (
+    <NOT> (
+      <GREATER> <THAN> expr()
+      |
+      <LESS> <THAN> expr()
+      |
+      <EQUAL> <TO> expr()
+    )
     |
-    expr() <IS> <LESS> <THAN> expr()
+    <GREATER> <THAN> expr()
     |
-    expr() <IS> <EQUAL> <TO> expr()
+    <LESS> <THAN> expr()
     |
-    expr() <IS> <NOT> <GREATER> <THAN> expr()
-    |
-    expr() <IS> <NOT> <LESS> <THAN> expr()
-    |
-    expr() <IS> <NOT> <EQUAL> <TO> expr()
+    <EQUAL> <TO> expr()
   )
 }
