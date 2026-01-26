@@ -68,12 +68,6 @@ public class CobolCompiler {
 }
 PARSER_END(CobolCompiler)
 
-/* ====== ESPACIOS (excepto cuando es comentario de línea completa) ====== */
-SKIP :
-{
-  " " | "\t" | "\r"
-}
-
 /* -------------------- COMENTARIO COBOL línea completa (asterisco en columna 7) -------------------- */
 SKIP :
 {
@@ -87,10 +81,10 @@ SKIP :
     (~["\r","\n"])* >
 }
 
-/* ====== SALTO DE LÍNEA ====== */
+/* -------------------- ESPACIOS -------------------- */
 SKIP :
 {
-  "\n"
+  " " | "\t" | "\r" | "\n"
 }
 
 /* -------------------- TOKENS -------------------- */
@@ -147,7 +141,7 @@ TOKEN : {
   | < CAD_SIMPLE: "'" (~["'"])* "'" >
 }
 
-/* ====== GRAMÁTICA ====== */
+/* -------------------- GRAMÁTICA -------------------- */
 void programa() : {} {
   <PROGRAM> <ID> <DOT>
   <BEGIN>
