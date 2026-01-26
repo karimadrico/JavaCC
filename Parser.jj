@@ -9,22 +9,32 @@ import java.io.*;
 
 public class CobolCompiler {
 
+  /* Conjunto para guardar las variables usadas en el programa */
+  private Set<String> variables = new HashSet<>();
+
+  /* Lista donde se almacena el código intermedio generado */
   private List<String> codigo = new ArrayList<>();
+
+  /* Contadores para temporales y etiquetas */
   private int tempCount = 1;
   private int labelCount = 0;
 
+  /* Genera una nueva variable temporal */
   private String nuevaTemp() {
     return "t" + (tempCount++);
   }
 
+  /* Genera una nueva etiqueta */
   private String nuevaEtiqueta() {
     return "L" + (labelCount++);
   }
 
+  /* Añade una línea de código intermedio con indentación */
   private void emit(String s) {
     codigo.add("    " + s);
   }
 
+  /* Clase auxiliar para guardar una comparación booleana */
   static class BooleanResult {
     String e1, e2, op;
     boolean negated;
@@ -37,7 +47,8 @@ public class CobolCompiler {
     }
   }
 
-  private void saltoFalso(BooleanResult br, String etq) {
+  /* Genera el salto cuando una condición booleana es falsa */
+  private void saltoFalso(BooleanResult br, String etiquetaFalsa) {
     String op = br.op;
 
     if (br.negated) {
@@ -46,51 +57,66 @@ public class CobolCompiler {
       else if (op.equals("==")) op = "!=";
     }
 
-    emit("if " + br.e1 + " " + op + " " + br.e2 + " goto " + etq);
+    String opNeg;
+    if (op.equals(">")) opNeg = "<=";
+    else if (op.equals("<")) opNeg = ">=";
+    else if (op.equals("==")) opNeg = "!=";
+    else if (op.equals("!=")) opNeg = "==";
+    else opNeg = op;
+
+    emit("if " + br.e1 + " " + opNeg + " " + br.e2 + " goto " + etiquetaFalsa);
   }
 
   public static void main(String[] args) throws Exception {
-    InputStream in = (args.length > 0)
-        ? new FileInputStream(args[0])
-        : System.in;
-
-    CobolCompiler p = new CobolCompiler(in);
-    p.program();
-
-    for (String s : p.codigo)
+    InputStream in = (args.length > 0) ? new FileInputStream(args[0]) : System.in;
+    CobolCompiler parser = new CobolCompiler(in);
+    parser.program();
+    for (String s : parser.codigo) {
       System.out.println(s);
+    }
   }
 }
 
 PARSER_END(CobolCompiler)
 
-// ================= COMENTARIOS =================
+/* ================= COMENTARIOS ================= */
 
+/* Comentario de línea completa: asterisco en columna 7 */
 SKIP :
 {
-  < "*" (~["\n","\r"])* >
+  < ("\n" | "\r\n") " " " " " " " " " " " "*" (~["\n","\r"])* >
 }
 
+/* Comentarios en línea que empiezan por *> */
 SKIP :
 {
   < "*>"
     (~["\n","\r"])* >
 }
 
+/* Espacios en blanco */
 SKIP : { " " | "\t" | "\n" | "\r" }
 
-// ================= TOKENS =================
+/* ================= TOKENS ================= */
 
 TOKEN : { < DOT: "." > }
 
 TOKEN : { < PROGRAM: "PROGRAM" > }
 TOKEN : { < BEGIN: "BEGIN" > }
 TOKEN : { < END: "END" > }
+
 TOKEN : { < IF: "IF" > }
 TOKEN : { < THEN: "THEN" > }
 TOKEN : { < ELSE: "ELSE" > }
+
 TOKEN : { < WHILE: "WHILE" > }
 TOKEN : { < DO: "DO" > }
+
+TOKEN : { < VARYING: "VARYING" > }
+TOKEN : { < FROM: "FROM" > }
+TOKEN : { < TO: "TO" > }          
+TOKEN : { < BY: "BY" > }
+
 TOKEN : { < IS: "IS" > }
 TOKEN : { < NOT: "NOT" > }
 TOKEN : { < GREATER: "GREATER" > }
@@ -99,11 +125,22 @@ TOKEN : { < EQUAL: "EQUAL" > }
 TOKEN : { < THAN: "THAN" > }
 
 TOKEN : { < MOVE: "MOVE" > }
-TOKEN : { < DISPLAY: "DISPLAY" > }
+TOKEN : { < ADD: "ADD" > }
+TOKEN : { < SUBTRACT: "SUBTRACT" > }
+TOKEN : { < MULTIPLY: "MULTIPLY" > }
+TOKEN : { < DIVIDE: "DIVIDE" > }
+TOKEN : { < GIVING: "GIVING" > }
+
 TOKEN : { < ACCEPT: "ACCEPT" > }
+TOKEN : { < DISPLAY: "DISPLAY" > }
 
 TOKEN : { < MAS: "+" > }
 TOKEN : { < MENOS: "-" > }
+TOKEN : { < POR: "*" > }
+TOKEN : { < DIV: "/" > }
+TOKEN : { < PA: "(" > }
+TOKEN : { < PC: ")" > }
+TOKEN : { < COMA: "," > }
 
 TOKEN :
 {
@@ -112,13 +149,13 @@ TOKEN :
 | < CAD: "\"" (~["\""])* "\"" | "'" (~["'"])* "'" >
 }
 
-// ================= GRAMÁTICA =================
+/* ================= GRAMÁTICA ================= */
 
 void program() : {}
 {
   <PROGRAM> <ID> <DOT>
   <BEGIN>
-    stmts()
+  stmts()
   <END> <DOT>
 }
 
@@ -129,45 +166,20 @@ void stmts() : {}
 
 void stmt() : {}
 {
-  ( cond() <DOT>
-  | loop() <DOT>
-  | assig() <DOT>
-  | io() <DOT>
-  )
+  loop() <DOT>
+| cond() <DOT>
+| assig() <DOT>
+| io() <DOT>
 }
 
-// -------- IF --------
-
-void cond() :
-{
-  BooleanResult br;
-  String lElse, lFin;
-}
-{
-  <IF> br=booleanExpr() <THEN>
-  {
-    lElse = nuevaEtiqueta();
-    lFin  = nuevaEtiqueta();
-    saltoFalso(br, lElse);
-  }
-  stmts()
-  {
-    emit("goto " + lFin);
-    emit(lElse + ":");
-  }
-  ( <ELSE> stmts() )?
-  <END>
-  {
-    emit(lFin + ":");
-  }
-}
-
-// -------- WHILE --------
+/* -------- PUNTO 4 y 5: BUCLES -------- */
 
 void loop() :
 {
   BooleanResult br;
   String lIni, lFin;
+  Token id;
+  String ini, fin, paso;
 }
 {
   <WHILE>
@@ -186,73 +198,126 @@ void loop() :
     emit("goto " + lIni);
     emit(lFin + ":");
   }
+
+|
+  <VARYING> id=<ID>
+  (
+    <FROM> ini=atomic() | { ini = "1"; }
+  )
+  <TO> fin=atomic()
+  (
+    <BY> paso=atomic() | { paso = "1"; }
+  )
+  <DO>
+  {
+    lIni = nuevaEtiqueta();
+    lFin = nuevaEtiqueta();
+    emit(id.image + " := " + ini);
+    emit(lIni + ":");
+    emit("if " + id.image + " > " + fin + " goto " + lFin);
+  }
+  stmts()
+  <END>
+  {
+    emit(id.image + " := " + id.image + " + " + paso);
+    emit("goto " + lIni);
+    emit(lFin + ":");
+  }
 }
 
-// -------- ASIGNACIÓN --------
+/* -------- PUNTO 3: CONDICIONAL -------- */
+
+void cond() :
+{
+  BooleanResult br;
+  String lElse, lFin;
+}
+{
+  <IF> br=booleanExpr() <THEN>
+  {
+    lElse = nuevaEtiqueta();
+    lFin = nuevaEtiqueta();
+    saltoFalso(br, lElse);
+  }
+  stmts()
+  {
+    emit("goto " + lFin);
+    emit(lElse + ":");
+  }
+  ( <ELSE> stmts() )?
+  <END>
+  {
+    emit(lFin + ":");
+  }
+}
+
+/* -------- ASIGNACIONES -------- */
 
 void assig() : {}
 {
   <MOVE> expr() <TO> <ID>
+| <ADD> expr() <TO> <ID>
+| <SUBTRACT> expr() <FROM> <ID>
+| <MULTIPLY> expr() <BY> expr() <GIVING> <ID>
+| <DIVIDE> expr() <BY> expr() <GIVING> <ID>
 }
 
-// -------- IO --------
+/* -------- ENTRADA / SALIDA -------- */
 
 void io() : {}
 {
-  <DISPLAY> literal()
+  <DISPLAY> literal() ( <COMA> literal() )*
 | <ACCEPT> <ID>
 }
-
-// -------- LITERAL --------
 
 void literal() : {}
 {
   <ID> | <NUM> | <CAD>
 }
 
-// -------- EXPRESIONES --------
-
-String expr() :
-{
-  String left, right;
-}
-{
-  left=val()
-  (
-    <MAS> right=val()
-      { String t=nuevaTemp(); emit(t+" := "+left+" + "+right); left=t; }
-  | <MENOS> right=val()
-      { String t=nuevaTemp(); emit(t+" := "+left+" - "+right); left=t; }
-  )*
-  { return left; }
-}
-
-String val() :
+String atomic() :
 {
   Token t;
 }
 {
-  t=<ID> { return t.image; }
-| t=<NUM> { return t.image; }
+  ( t=<ID> | t=<NUM> )
+  { return t.image; }
 }
 
-// -------- BOOLEAN --------
+String expr() :
+{
+  String v;
+}
+{
+  v=mult() { return v; }
+}
+
+String mult() :
+{
+  Token t;
+}
+{
+  ( t=<ID> | t=<NUM> | <PA> expr() <PC> )
+  { return t.image; }
+}
+
+/* -------- PUNTO 2: BOOLEANEXPR -------- */
 
 BooleanResult booleanExpr() :
 {
   String e1, e2, op;
-  boolean neg=false;
+  boolean neg = false;
 }
 {
   e1=expr() <IS>
-  ( <NOT> { neg=true; } )?
+  ( <NOT> { neg = true; } )?
   (
-    <GREATER> <THAN> { op=">"; }
-  | <LESS> <THAN> { op="<"; }
-  | <EQUAL> <TO> { op="=="; }
+    <GREATER> <THAN> { op = ">"; }
+  | <LESS> <THAN> { op = "<"; }
+  | <EQUAL> <TO> { op = "=="; }
   )
   e2=expr()
   {
-    return new BooleanResult(e1,e2,op,neg);
+    return new BooleanResult(e1, e2, op, neg);
   }
 }
