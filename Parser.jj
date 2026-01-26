@@ -11,24 +11,59 @@ public class CobolCompiler {
   private Set<String> variables = new HashSet<>();
   // Lista para almacenar el código intermedio generado
   private List<String> codigoIntermedio = new ArrayList<>();
+  
+  // Contadores para generación de código intermedio
+  private int contadorTemporales = 1;
+  private int contadorEtiquetas = 0;
+  
+  // Genera un nuevo nombre de variable temporal
+  private String nuevaTemporal() {
+    return "t" + (contadorTemporales++);
+  }
+  
+  // Genera un nuevo nombre de etiqueta
+  private String nuevaEtiqueta() {
+    return "LBL" + (contadorEtiquetas++);
+  }
+  
+  // Agrega una línea de código intermedio con indentación
+  private void agregarCodigo(String codigo) {
+    codigoIntermedio.add("    " + codigo);
+  }
+  
+  // Obtiene el valor de una expresión (puede ser temporal, variable o constante)
+  private String obtenerValor(String valor) {
+    // Si es un número o cadena, lo devuelve tal cual
+    if (valor.matches("\\d+(\\.\\d+)?([eE][+-]?\\d+)?") || 
+        valor.startsWith("\"") || valor.startsWith("'")) {
+      return valor;
+    }
+    // Si es una variable, la registra y la devuelve
+    if (!valor.startsWith("t") || !valor.matches("t\\d+")) {
+      variables.add(valor);
+    }
+    return valor;
+  }
 
   public static void main(String[] args) throws Exception {
+    System.out.println("Starting...");
     InputStream input;
+    String nombreArchivo = null;
     if (args.length > 0) {
-      input = new FileInputStream(args[0]);
+      nombreArchivo = args[0];
+      input = new FileInputStream(nombreArchivo);
+      System.out.println("Reading from file " + nombreArchivo + " . . .");
     } else {
       input = System.in;
+      System.out.println("Reading from standard input . . .");
     }
     CobolCompiler parser = new CobolCompiler(input);
     parser.programa();
-    System.out.println("Programa analizado correctamente.\n\nVariables usadas:");
-    for (String v : parser.variables) {
-      System.out.println("  " + v);
-    }
-    System.out.println("\nCódigo intermedio generado:");
+    // Imprimir código intermedio generado
     for (String linea : parser.codigoIntermedio) {
       System.out.println(linea);
     }
+    System.out.println("Program parsed successfully.");
   }
 }
 PARSER_END(CobolCompiler)
@@ -49,7 +84,7 @@ SKIP :
 /* -------------------- COMENTARIO COBOL línea completa (asterisco en columna 7) -------------------- */
 SKIP :
 {
-  "\n" "      " "*" (~["\r","\n"])*
+  < COMMENT_LINE : "\n" " " " " " " " " " " " " "*" (~["\r","\n"])* >
 }
 
 /* -------------------- TOKENS -------------------- */
@@ -160,7 +195,10 @@ void asignacion() : {} {
 
 void io() : {} {
   (
-    <ACCEPT> id=<ID> { variables.add(id.image); codigoIntermedio.add("READ " + id.image); }
+    <ACCEPT> id=<ID> { 
+      variables.add(id.image); 
+      agregarCodigo("lee " + id.image); 
+    }
     |
     <DISPLAY> literal()
     |
@@ -170,13 +208,16 @@ void io() : {} {
 
 void literal() : {} {
   (
-    <ID> { variables.add(token.image); codigoIntermedio.add("PRINT " + token.image); }
+    <ID> { 
+      variables.add(token.image); 
+      agregarCodigo("print " + token.image); 
+    }
     |
-    <NUM> { codigoIntermedio.add("PRINT " + token.image); }
+    <NUM> { agregarCodigo("print " + token.image); }
     |
-    <CAD_DOBLE> { codigoIntermedio.add("PRINT " + token.image); }
+    <CAD_DOBLE> { agregarCodigo("print " + token.image); }
     |
-    <CAD_SIMPLE> { codigoIntermedio.add("PRINT " + token.image); }
+    <CAD_SIMPLE> { agregarCodigo("print " + token.image); }
   )
 }
 
