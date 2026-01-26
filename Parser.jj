@@ -71,7 +71,7 @@ PARSER_END(CobolCompiler)
 /* -------------------- COMENTARIO COBOL línea completa (asterisco en columna 7) -------------------- */
 SKIP :
 {
-  "\n" " " " " " " " " " " " " "*" (~["\r","\n"])*
+  < COMMENT_LINE : "\n" (" ") (" ") (" ") (" ") (" ") (" ") "*" (~["\r","\n"])* >
 }
 
 /* -------------------- COMENTARIO COBOL *> -------------------- */
