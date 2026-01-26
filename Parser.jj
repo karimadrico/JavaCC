@@ -19,7 +19,7 @@ public class CobolCompiler {
     codigoIntermedio.add("    " + c);
   }
 
-  /*  booleanExpr devuelve información estructurada */
+  /* booleanExpr devuelve información de comparación */
   static class BooleanResult {
     String expr1;
     String expr2;
@@ -34,7 +34,7 @@ public class CobolCompiler {
     }
   }
 
-  /* Usa la información devuelta por booleanExpr */
+  /* ----------------------------------------- generación de saltos para IF–THEN–ELSE ----------------------------------------- */
   private void generarSaltoFalso(BooleanResult br, String etiquetaFalsa) {
     String opReal = br.op;
 
@@ -125,7 +125,7 @@ void sentencia() : {} {
   )
 }
 
-/* ---------------- IF / THEN / ELSE ---------------- */
+/* ===================== IF–THEN–ELSE ===================== */
 
 void condicional() : {
   BooleanResult br;
@@ -135,10 +135,13 @@ void condicional() : {
   {
     lblElse = nuevaEtiqueta();
     lblFin = nuevaEtiqueta();
+
+    /* Si la condición es falsa → salto a ELSE */
     generarSaltoFalso(br, lblElse);
   }
   sentencias()
   {
+    /* Al terminar THEN → saltar al final */
     agregarCodigo("goto " + lblFin);
     agregarCodigo(lblElse + ":");
   }
@@ -148,54 +151,36 @@ void condicional() : {
     {}
   )
   {
+    /* Fin del IF */
     agregarCodigo(lblFin + ":");
   }
   <END>
 }
 
-/* ---------------- WHILE y VARYING ---------------- */
+/* ===================== WHILE  ===================== */
 
 void bucle() : {
   BooleanResult br;
   String lblIni, lblFin;
-  Token id;
-  String fin;
 } {
-  (
-    <WHILE>
-    {
-      lblIni = nuevaEtiqueta();
-      lblFin = nuevaEtiqueta();
-      agregarCodigo(lblIni + ":");
-    }
-    br=booleanExpr() <DO>
-    {
-      generarSaltoFalso(br, lblFin);
-    }
-    sentencias() <END>
-    {
-      agregarCodigo("goto " + lblIni);
-      agregarCodigo(lblFin + ":");
-    }
-    |
-    <VARYING> id=<ID> <TO> fin=valor() <DO>
-    {
-      lblIni = nuevaEtiqueta();
-      lblFin = nuevaEtiqueta();
-      agregarCodigo(id.image + " := 1");
-      agregarCodigo(lblIni + ":");
-      agregarCodigo("if " + id.image + " > " + fin + " goto " + lblFin);
-    }
-    sentencias() <END>
-    {
-      agregarCodigo(id.image + " := " + id.image + " + 1");
-      agregarCodigo("goto " + lblIni);
-      agregarCodigo(lblFin + ":");
-    }
-  )
+  <WHILE>
+  {
+    lblIni = nuevaEtiqueta();
+    lblFin = nuevaEtiqueta();
+    agregarCodigo(lblIni + ":");
+  }
+  br=booleanExpr() <DO>
+  {
+    generarSaltoFalso(br, lblFin);
+  }
+  sentencias() <END>
+  {
+    agregarCodigo("goto " + lblIni);
+    agregarCodigo(lblFin + ":");
+  }
 }
 
-/* ---------------- Valores simples ---------------- */
+/* ===================== Valores simples ===================== */
 
 String valor() : {
   Token t;
@@ -204,7 +189,7 @@ String valor() : {
   { return t.image; }
 }
 
-/* ---------------- BooleanExpr ---------------- */
+/* ===================== BooleanExpr ===================== */
 
 BooleanResult booleanExpr() : {
   String e1, e2, op;
