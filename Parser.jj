@@ -8,46 +8,43 @@ import java.io.*;
 
 public class CobolCompiler {
 
-  private List<String> codigoIntermedio = new ArrayList<>();
-  private int contadorEtiquetas = 0;
+  private List<String> codigo = new ArrayList<>();
+  private int etq = 0;
 
   private String nuevaEtiqueta() {
-    return "LBL" + (contadorEtiquetas++);
+    return "L" + (etq++);
   }
 
-  private void agregarCodigo(String c) {
-    codigoIntermedio.add("    " + c);
+  private void emit(String s) {
+    codigo.add("    " + s);
   }
 
-  /* booleanExpr devuelve información de comparación */
+  /*  ----------------------------------- resultado estructurado de booleanExpr -----------------------------------  */
   static class BooleanResult {
-    String expr1;
-    String expr2;
+    String e1;
+    String e2;
     String op;
-    boolean negado;
+    boolean neg;
 
-    BooleanResult(String e1, String e2, String o, boolean n) {
-      expr1 = e1;
-      expr2 = e2;
+    BooleanResult(String a, String b, String o, boolean n) {
+      e1 = a;
+      e2 = b;
       op = o;
-      negado = n;
+      neg = n;
     }
   }
 
-  /* ----------------------------------------- generación de saltos para IF–THEN–ELSE ----------------------------------------- */
-  private void generarSaltoFalso(BooleanResult br, String etiquetaFalsa) {
-    String opReal = br.op;
+  /*  ----------------------------------- Utilidad para IF y WHILE     -----------------------------------  */
+  private void saltoFalso(BooleanResult br, String lblFalse) {
+    String op = br.op;
 
-    if (br.negado) {
-      if (opReal.equals(">")) opReal = "<=";
-      else if (opReal.equals("<")) opReal = ">=";
-      else if (opReal.equals("==")) opReal = "!=";
+    if (br.neg) {
+      if (op.equals(">")) op = "<=";
+      else if (op.equals("<")) op = ">=";
+      else if (op.equals("==")) op = "!=";
     }
 
-    agregarCodigo(
-      "if " + br.expr1 + " " + opReal + " " + br.expr2 +
-      " goto " + etiquetaFalsa
-    );
+    emit("if " + br.e1 + " " + op + " " + br.e2 + " goto " + lblFalse);
   }
 
   public static void main(String[] args) throws Exception {
@@ -55,28 +52,26 @@ public class CobolCompiler {
         ? new FileInputStream(args[0])
         : System.in;
 
-    CobolCompiler parser = new CobolCompiler(in);
-    parser.programa();
+    CobolCompiler p = new CobolCompiler(in);
+    p.program();
 
-    for (String s : parser.codigoIntermedio)
+    for (String s : p.codigo)
       System.out.println(s);
-
-    System.out.println("Program parsed successfully.");
   }
 }
 PARSER_END(CobolCompiler)
 
-/* ===================== SKIP ===================== */
+/*  -----------------------------------  ESPACIOS Y COMENTARIOS  -----------------------------------  */
 
 SKIP : { " " | "\t" | "\r" | "\n" }
 
 SKIP : {
-  < COMMENT_LINE :
-    "\n" " " " " " " " " " " " " "*" (~["\n","\r"])* >
+  < LINE_COMMENT :
+    "\n" " " " " " " " " " " " "*" (~["\n","\r"])* >
 }
 
 SKIP : {
-  < COMMENT : "*>"
+  < INLINE_COMMENT : "*>"
     (~["\n","\r"])* >
 }
 
@@ -92,14 +87,13 @@ TOKEN : { < THEN: "THEN" > }
 TOKEN : { < ELSE: "ELSE" > }
 TOKEN : { < WHILE: "WHILE" > }
 TOKEN : { < DO: "DO" > }
-TOKEN : { < VARYING: "VARYING" > }
-TOKEN : { < TO: "TO" > }
 TOKEN : { < IS: "IS" > }
 TOKEN : { < NOT: "NOT" > }
 TOKEN : { < GREATER: "GREATER" > }
 TOKEN : { < LESS: "LESS" > }
 TOKEN : { < EQUAL: "EQUAL" > }
 TOKEN : { < THAN: "THAN" > }
+TOKEN : { < TO: "TO" > }
 
 TOKEN : {
   < ID: (["A"-"Z"])(["A"-"Z","0"-"9","-"])* >
@@ -108,58 +102,53 @@ TOKEN : {
 
 /* ===================== GRAMÁTICA ===================== */
 
-void programa() : {} {
+void program() : {} {
   <PROGRAM> <ID> <DOT>
   <BEGIN>
-  sentencias()
+  stmts()
   <END> <DOT>
 }
 
-void sentencias() : {} {
-  ( sentencia() )*
+void stmts() : {} {
+  ( stmt() )*
 }
 
-void sentencia() : {} {
-  ( condicional() <DOT>
-  | bucle() <DOT>
+void stmt() : {} {
+  ( cond() <DOT>
+  | loop() <DOT>
   )
 }
 
-/* ===================== IF–THEN–ELSE ===================== */
+/* ===================== COND ===================== */
 
-void condicional() : {
+void cond() : {
   BooleanResult br;
-  String lblElse, lblFin;
+  String lblElse, lblEnd;
 } {
   <IF> br=booleanExpr() <THEN>
   {
     lblElse = nuevaEtiqueta();
-    lblFin = nuevaEtiqueta();
-
-    /* Si la condición es falsa → salto a ELSE */
-    generarSaltoFalso(br, lblElse);
+    lblEnd  = nuevaEtiqueta();
+    saltoFalso(br, lblElse);
   }
-  sentencias()
+  stmts()
   {
-    /* Al terminar THEN → saltar al final */
-    agregarCodigo("goto " + lblFin);
-    agregarCodigo(lblElse + ":");
+    emit("goto " + lblEnd);
+    emit(lblElse + ":");
   }
   (
-    <ELSE> sentencias()
-    |
-    {}
+    <ELSE> stmts()
+    | {}
   )
   {
-    /* Fin del IF */
-    agregarCodigo(lblFin + ":");
+    emit(lblEnd + ":");
   }
   <END>
 }
 
-/* ===================== WHILE  ===================== */
+/* ===================== LOOP / WHILE  ===================== */
 
-void bucle() : {
+void loop() : {
   BooleanResult br;
   String lblIni, lblFin;
 } {
@@ -167,35 +156,36 @@ void bucle() : {
   {
     lblIni = nuevaEtiqueta();
     lblFin = nuevaEtiqueta();
-    agregarCodigo(lblIni + ":");
+    emit(lblIni + ":");
   }
   br=booleanExpr() <DO>
   {
-    generarSaltoFalso(br, lblFin);
+    saltoFalso(br, lblFin);
   }
-  sentencias() <END>
+  stmts()
+  <END>
   {
-    agregarCodigo("goto " + lblIni);
-    agregarCodigo(lblFin + ":");
+    emit("goto " + lblIni);
+    emit(lblFin + ":");
   }
 }
 
-/* ===================== Valores simples ===================== */
+/* ===================== VALORES ===================== */
 
-String valor() : {
+String atomic() : {
   Token t;
 } {
   ( t=<ID> | t=<NUM> )
   { return t.image; }
 }
 
-/* ===================== BooleanExpr ===================== */
+/* ===================== BOOLEANEXPR ===================== */
 
 BooleanResult booleanExpr() : {
   String e1, e2, op;
   boolean neg = false;
 } {
-  e1=valor() <IS>
+  e1=atomic() <IS>
   (
     <NOT> { neg = true; }
     (
@@ -208,7 +198,7 @@ BooleanResult booleanExpr() : {
     | <LESS> <THAN> { op = "<"; }
     | <EQUAL> <TO> { op = "=="; }
   )
-  e2=valor()
+  e2=atomic()
   {
     return new BooleanResult(e1, e2, op, neg);
   }
