@@ -39,50 +39,49 @@ SKIP :
   " " | "\t" | "\r" | "\n"
 }
 
-/* ====== COMENTARIO COBOL *> ====== */
+/* -------------------- COMENTARIO COBOL *> -------------------- */
 SKIP :
 {
   < COMMENT : "*>"
     (~["\r","\n"])* >
 }
 
-/* ====== TOKENS ====== */
+/* -------------------- COMENTARIO COBOL línea completa (asterisco en columna 7) -------------------- */
+SKIP :
+{
+  < COMMENT_LINE : "\n" "      " "*" (~["\r","\n"])* >
+}
+
+/* -------------------- TOKENS -------------------- */
 TOKEN : { < DOT: "." > }
 
 // Palabras reservadas principales
 TOKEN : { < PROGRAM: "PROGRAM" > }
 TOKEN : { < BEGIN: "BEGIN" > }
 TOKEN : { < END: "END" > }
-TOKEN : { < LEE: "LEE" > }
-TOKEN : { < MUESTRA: "MUESTRA" > }
-TOKEN : { < SUMA: "SUMA" > }
-TOKEN : { < RESTA: "RESTA" > }
-TOKEN : { < MULTIPLICA: "MULTIPLICA" > }
+TOKEN : { < ACCEPT: "ACCEPT" > }
+TOKEN : { < DISPLAY: "DISPLAY" > }
+TOKEN : { < MOVE: "MOVE" > }
+TOKEN : { < ADD: "ADD" > }
+TOKEN : { < SUBTRACT: "SUBTRACT" > }
+TOKEN : { < MULTIPLY: "MULTIPLY" > }
 TOKEN : { < DIVIDE: "DIVIDE" > }
-TOKEN : { < MUEVE: "MUEVE" > }
-TOKEN : { < CALCULA: "CALCULA" > }
-TOKEN : { < COMO: "COMO" > }
-TOKEN : { < FIN_CALCULA: "FIN-CALCULA" > }
-TOKEN : { < DE: "DE" > }
-TOKEN : { < A: "A" > }
-TOKEN : { < POR: "POR" > }
-TOKEN : { < ENTRE: "ENTRE" > }
-TOKEN : { < DANDO: "DANDO" > }
-TOKEN : { < SI: "SI" > }
-TOKEN : { < ENTONCES: "ENTONCES" > }
-TOKEN : { < SINO: "SINO" > }
-TOKEN : { < FIN_SI: "FIN-SI" > }
-TOKEN : { < EJECUTA: "EJECUTA" > }
-TOKEN : { < FIN_EJECUTA: "FIN-EJECUTA" > }
-TOKEN : { < HASTA_QUE: "HASTA-QUE" > }
-TOKEN : { < VECES: "VECES" > }
-TOKEN : { < USANDO: "USANDO" > }
-TOKEN : { < NO: "NO" > }
-TOKEN : { < ES: "ES" > }
-TOKEN : { < MAYOR: "MAYOR" > }
-TOKEN : { < MENOR: "MENOR" > }
-TOKEN : { < IGUAL: "IGUAL" > }
-TOKEN : { < QUE: "QUE" > }
+TOKEN : { < GIVING: "GIVING" > }
+TOKEN : { < IF: "IF" > }
+TOKEN : { < THEN: "THEN" > }
+TOKEN : { < ELSE: "ELSE" > }
+TOKEN : { < WHILE: "WHILE" > }
+TOKEN : { < DO: "DO" > }
+TOKEN : { < VARYING: "VARYING" > }
+TOKEN : { < FROM: "FROM" > }
+TOKEN : { < TO: "TO" > }
+TOKEN : { < BY: "BY" > }
+TOKEN : { < IS: "IS" > }
+TOKEN : { < NOT: "NOT" > }
+TOKEN : { < GREATER: "GREATER" > }
+TOKEN : { < LESS: "LESS" > }
+TOKEN : { < EQUAL: "EQUAL" > }
+TOKEN : { < THAN: "THAN" > }
 
 // Operadores y puntuación
 TOKEN : { < COMA: "," > }
@@ -102,8 +101,9 @@ TOKEN : {
     (["A"-"Z","0"-"9"])
   | (["A"-"Z"])
   >
-  | < NUM: (["0"-"9"])+ >
-  | < CAD: "\"" (~["\""]) "*" "\"" >
+  | < NUM: (["0"-"9"])+ ("." (["0"-"9"])+)? (["e","E"] (["+","-"])? (["0"-"9"])+)? >
+  | < CAD_DOBLE: "\"" (~["\""])* "\"" >
+  | < CAD_SIMPLE: "'" (~["'"])* "'" >
 }
 
 /* ====== GRAMÁTICA ====== */
