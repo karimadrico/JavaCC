@@ -68,10 +68,16 @@ public class CobolCompiler {
 }
 PARSER_END(CobolCompiler)
 
-/* ====== ESPACIOS ====== */
+/* ====== ESPACIOS (excepto cuando es comentario de línea completa) ====== */
 SKIP :
 {
-  " " | "\t" | "\r" | "\n"
+  " " | "\t" | "\r"
+}
+
+/* -------------------- COMENTARIO COBOL línea completa (asterisco en columna 7) -------------------- */
+SKIP :
+{
+  "\n" " " " " " " " " " " " " "*" (~["\r","\n"])*
 }
 
 /* -------------------- COMENTARIO COBOL *> -------------------- */
@@ -81,10 +87,10 @@ SKIP :
     (~["\r","\n"])* >
 }
 
-/* -------------------- COMENTARIO COBOL línea completa (asterisco en columna 7) -------------------- */
+/* ====== SALTO DE LÍNEA ====== */
 SKIP :
 {
-  < COMMENT_LINE : "\n" " " " " " " " " " " " " "*" (~["\r","\n"])* >
+  "\n"
 }
 
 /* -------------------- TOKENS -------------------- */
@@ -165,13 +171,12 @@ void bucle() : {} {
   (
     <WHILE> booleanExpr() <DO> sentencias() <END>
     |
-    <VARYING> <ID> <FROM> atomic() <TO> atomic() <BY> atomic() <DO> sentencias() <END>
-    |
-    <VARYING> <ID> <FROM> atomic() <TO> atomic() <DO> sentencias() <END>
-    |
-    <VARYING> <ID> <TO> atomic() <BY> atomic() <DO> sentencias() <END>
-    |
-    <VARYING> <ID> <TO> atomic() <DO> sentencias() <END>
+    <VARYING> <ID> 
+    (
+      <FROM> atomic() <TO> atomic() (<BY> atomic() <DO> sentencias() <END> | <DO> sentencias() <END>)
+      |
+      <TO> atomic() (<BY> atomic() <DO> sentencias() <END> | <DO> sentencias() <END>)
+    )
   )
 }
 
@@ -193,16 +198,16 @@ void asignacion() : {} {
   )
 }
 
-void io() : {} {
+void io() : {
+  Token id;
+} {
   (
     <ACCEPT> id=<ID> { 
       variables.add(id.image); 
       agregarCodigo("lee " + id.image); 
     }
     |
-    <DISPLAY> literal()
-    |
-    <DISPLAY> literal() <COMA> literal() ( <COMA> literal() )*
+    <DISPLAY> literal() ( <COMA> literal() )*
   )
 }
 
