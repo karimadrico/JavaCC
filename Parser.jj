@@ -71,7 +71,7 @@ PARSER_END(CobolCompiler)
 /* -------------------- COMENTARIO COBOL línea completa (asterisco en columna 7) -------------------- */
 SKIP :
 {
-  < COMMENT_LINE : "\n" " " " " " " " " " " " " "*" (~["\r","\n"])* >
+  "\n" " " " " " " " " " " " " "*" (~["\r","\n"])*
 }
 
 /* -------------------- COMENTARIO COBOL *> -------------------- */
@@ -84,13 +84,7 @@ SKIP :
 /* -------------------- ESPACIOS -------------------- */
 SKIP :
 {
-  " " | "\t" | "\r"
-}
-
-/* -------------------- SALTO DE LÍNEA -------------------- */
-SKIP :
-{
-  "\n"
+  " " | "\t" | "\r" | "\n"
 }
 
 /* -------------------- TOKENS -------------------- */
@@ -184,17 +178,40 @@ void condicional() : {} {
   <IF> booleanExpr() <THEN> sentencias() (<ELSE> sentencias())? <END>
 }
 
-void asignacion() : {} {
+void asignacion() : {
+  String exprResult, expr1, expr2;
+  Token varId;
+} {
   (
-    <MOVE> expr() <TO> <ID>
+    <MOVE> exprResult=expr() <TO> varId=<ID>
+    {
+      variables.add(varId.image);
+      agregarCodigo(varId.image + " := " + exprResult);
+    }
     |
-    <ADD> expr() <TO> <ID>
+    <ADD> exprResult=expr() <TO> varId=<ID>
+    {
+      variables.add(varId.image);
+      agregarCodigo(varId.image + " := " + varId.image + " + " + exprResult);
+    }
     |
-    <SUBTRACT> expr() <FROM> <ID>
+    <SUBTRACT> exprResult=expr() <FROM> varId=<ID>
+    {
+      variables.add(varId.image);
+      agregarCodigo(varId.image + " := " + varId.image + " - " + exprResult);
+    }
     |
-    <MULTIPLY> expr() <BY> expr() <GIVING> <ID>
+    <MULTIPLY> expr1=expr() <BY> expr2=expr() <GIVING> varId=<ID>
+    {
+      variables.add(varId.image);
+      agregarCodigo(varId.image + " := " + expr1 + " * " + expr2);
+    }
     |
-    <DIVIDE> expr() <BY> expr() <GIVING> <ID>
+    <DIVIDE> expr1=expr() <BY> expr2=expr() <GIVING> varId=<ID>
+    {
+      variables.add(varId.image);
+      agregarCodigo(varId.image + " := " + expr1 + " / " + expr2);
+    }
   )
 }
 
@@ -228,7 +245,7 @@ void literal() : {} {
 
 String atomic() : {
   String resultado;
-  Token id;
+  Token id, num;
 } {
   (
     id=<ID> { 
@@ -236,7 +253,7 @@ String atomic() : {
       resultado = id.image; 
     }
     |
-    resultado=<NUM> { resultado = token.image; }
+    num=<NUM> { resultado = num.image; }
   )
   { return resultado; }
 }
@@ -283,7 +300,7 @@ String mult() : {
 
 String val() : {
   String resultado;
-  Token id;
+  Token id, num;
 } {
   (
     id=<ID> { 
@@ -291,7 +308,7 @@ String val() : {
       resultado = id.image; 
     }
     |
-    resultado=<NUM> { resultado = token.image; }
+    num=<NUM> { resultado = num.image; }
     |
     <PARENOPEN> resultado=expr() <PARENCLOSE>
   )
