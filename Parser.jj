@@ -80,22 +80,19 @@ PARSER_END(CobolCompiler)
 
 /* ===================== SKIP ===================== */
 
-/* Punto 6: comentarios COBOL de línea completa
-   * en columna 7 (seis espacios + asterisco) */
+/* Comentarios COBOL de línea completa: 6 espacios + asterisco */
 SKIP :
 {
-  (" " " " " " " " " " " " "*"
-   (~["\n","\r"])* )
+  " " " " " " " " " " " "*" (~["\n","\r"])*
 }
 
 /* Comentarios en línea *> */
 SKIP :
 {
-  "*>"
-  (~["\n","\r"])* 
+  "*>" (~["\n","\r"])*
 }
 
-/* Espacios */
+/* Espacios en blanco */
 SKIP :
 {
   " " | "\t" | "\n" | "\r"
@@ -152,10 +149,10 @@ TOKEN :
 
 void program() : {}
 {
-  <PROGRAM> <ID> <DOT>
-  <BEGIN>
+  < PROGRAM > < ID > < DOT >
+  < BEGIN >
   stmts()
-  <END> <DOT>
+  < END > < DOT >
 }
 
 void stmts() : {}
@@ -165,10 +162,10 @@ void stmts() : {}
 
 void stmt() : {}
 {
-    loop() <DOT>
-  | cond() <DOT>
-  | assig() <DOT>
-  | io() <DOT>
+    loop() < DOT >
+  | cond() < DOT >
+  | assig() < DOT >
+  | io() < DOT >
 }
 
 /* ---------- BUCLES ---------- */
@@ -181,40 +178,40 @@ void loop() :
   String ini, fin, paso;
 }
 {
-  <WHILE>
+  < WHILE >
   {
     lIni = nuevaEtiqueta();
     lFin = nuevaEtiqueta();
     emit(lIni + ":");
   }
-  br=booleanExpr() <DO>
+  br = booleanExpr() < DO >
   {
     saltoFalso(br, lFin);
   }
   stmts()
-  <END>
+  < END >
   {
     emit("goto " + lIni);
     emit(lFin + ":");
   }
 
 |
-  <VARYING> id=<ID>
+  < VARYING > id = <ID>
   {
     lIni = nuevaEtiqueta();
     lFin = nuevaEtiqueta();
   }
-  ( <FROM> ini=atomic() | { ini = "1"; } )
-  <TO> fin=atomic()
-  ( <BY> paso=atomic() | { paso = "1"; } )
-  <DO>
+  ( < FROM > ini = atomic() | { ini = "1"; } )
+  < TO > fin = atomic()
+  ( < BY > paso = atomic() | { paso = "1"; } )
+  < DO >
   {
     emit(id.image + " := " + ini);
     emit(lIni + ":");
     emit("if " + id.image + " > " + fin + " goto " + lFin);
   }
   stmts()
-  <END>
+  < END >
   {
     emit(id.image + " := " + id.image + " + " + paso);
     emit("goto " + lIni);
@@ -230,7 +227,7 @@ void cond() :
   String lElse, lFin;
 }
 {
-  <IF> br=booleanExpr() <THEN>
+  < IF > br = booleanExpr() < THEN >
   {
     lElse = nuevaEtiqueta();
     lFin = nuevaEtiqueta();
@@ -241,8 +238,8 @@ void cond() :
     emit("goto " + lFin);
     emit(lElse + ":");
   }
-  ( <ELSE> stmts() )?
-  <END>
+  ( < ELSE > stmts() )?
+  < END >
   {
     emit(lFin + ":");
   }
@@ -256,29 +253,29 @@ void assig() :
   Token id;
 }
 {
-  <MOVE> e1=expr() <TO> id=<ID>
+  < MOVE > e1 = expr() < TO > id = <ID>
   {
     emit(id.image + " := " + e1);
   }
-| <ADD> e1=expr() <TO> id=<ID>
+| < ADD > e1 = expr() < TO > id = <ID>
   {
     t = nuevaTemp();
     emit(t + " := " + id.image + " + " + e1);
     emit(id.image + " := " + t);
   }
-| <SUBTRACT> e1=expr() <FROM> id=<ID>
+| < SUBTRACT > e1 = expr() < FROM > id = <ID>
   {
     t = nuevaTemp();
     emit(t + " := " + id.image + " - " + e1);
     emit(id.image + " := " + t);
   }
-| <MULTIPLY> e1=expr() <BY> e2=expr() <GIVING> id=<ID>
+| < MULTIPLY > e1 = expr() < BY > e2 = expr() < GIVING > id = <ID>
   {
     t = nuevaTemp();
     emit(t + " := " + e1 + " * " + e2);
     emit(id.image + " := " + t);
   }
-| <DIVIDE> e1=expr() <BY> e2=expr() <GIVING> id=<ID>
+| < DIVIDE > e1 = expr() < BY > e2 = expr() < GIVING > id = <ID>
   {
     t = nuevaTemp();
     emit(t + " := " + e1 + " / " + e2);
@@ -293,17 +290,17 @@ void io() :
   String l;
 }
 {
-  <DISPLAY> l=literal()
+  < DISPLAY > l = literal()
   {
     emit("print " + l);
   }
   (
-    "," l=literal()
+    "," l = literal()
     {
       emit("print " + l);
     }
   )*
-| <ACCEPT> <ID>
+| < ACCEPT > <ID>
 }
 
 /* ---------- EXPRESIONES ---------- */
@@ -313,7 +310,7 @@ String literal() :
   Token t;
 }
 {
-  ( t=<ID> | t=<NUM> | t=<CAD> )
+  ( t = <ID> | t = <NUM> | t = <CAD> )
   { return t.image; }
 }
 
@@ -322,7 +319,7 @@ String atomic() :
   Token t;
 }
 {
-  ( t=<ID> | t=<NUM> )
+  ( t = <ID> | t = <NUM> )
   { return t.image; }
 }
 
@@ -331,16 +328,16 @@ String expr() :
   String a, b, t;
 }
 {
-  a=mult()
+  a = mult()
   (
-    "+" b=mult()
+    "+" b = mult()
     {
       t = nuevaTemp();
       emit(t + " := " + a + " + " + b);
       a = t;
     }
   |
-    "-" b=mult()
+    "-" b = mult()
     {
       t = nuevaTemp();
       emit(t + " := " + a + " - " + b);
@@ -355,16 +352,16 @@ String mult() :
   String a, b, t;
 }
 {
-  a=val()
+  a = val()
   (
-    "*" b=val()
+    "*" b = val()
     {
       t = nuevaTemp();
       emit(t + " := " + a + " * " + b);
       a = t;
     }
   |
-    "/" b=val()
+    "/" b = val()
     {
       t = nuevaTemp();
       emit(t + " := " + a + " / " + b);
@@ -380,9 +377,9 @@ String val() :
   String e;
 }
 {
-    t=<NUM> { return t.image; }
-  | t=<ID>  { return t.image; }
-  | <PA> e=expr() <PC> { return e; }
+    t = <NUM> { return t.image; }
+  | t = <ID>  { return t.image; }
+  | < PA > e = expr() < PC > { return e; }
 }
 
 /* ---------- BOOLEANEXPR ---------- */
@@ -393,14 +390,14 @@ BooleanResult booleanExpr() :
   boolean neg = false;
 }
 {
-  e1=expr() <IS>
-  ( <NOT> { neg = true; } )?
+  e1 = expr() < IS >
+  ( < NOT > { neg = true; } )?
   (
-    <GREATER> <THAN> { op = ">"; }
-  | <LESS> <THAN>    { op = "<"; }
-  | <EQUAL> <TO>     { op = "=="; }
+    < GREATER > < THAN > { op = ">"; }
+  | < LESS > < THAN >    { op = "<"; }
+  | < EQUAL > < TO >     { op = "=="; }
   )
-  e2=expr()
+  e2 = expr()
   {
     return new BooleanResult(e1, e2, op, neg);
   }
