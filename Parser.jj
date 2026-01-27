@@ -213,6 +213,7 @@ void loop() :
 |
   < VARYING > id = <ID>
   {
+    registrarVariable(id.image);
     lIni = nuevaEtiqueta();
     lFin = nuevaEtiqueta();
   }
