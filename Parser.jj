@@ -80,16 +80,16 @@ PARSER_END(CobolCompiler)
 
 /* ===================== SKIP ===================== */
 
+/* Comentarios de línea completa: 6 espacios + asterisco */
+SKIP :
+{
+  < LINECOMMENT: "      " "*" (~["\n","\r"])* >
+}
+
 /* Comentarios en línea *> */
 SKIP :
 {
-  "*>" (~["\n","\r"])*
-}
-
-/* Comentarios COBOL de línea completa: 6 espacios + asterisco (precedido por newline) */
-SKIP :
-{
-  "\n" "      " "*" (~["\n","\r"])*
+  < INLINECOMMENT: "*>" (~["\n","\r"])* >
 }
 
 /* Espacios en blanco */
