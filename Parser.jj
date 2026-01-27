@@ -29,9 +29,23 @@ public class CobolCompiler {
     return "L" + (labelCount++);
   }
 
+  /* Registra una variable */
+  private void registrarVariable(String var) {
+    if (var != null && !var.isEmpty()) {
+      variables.add(var);
+    }
+  }
+
   /* Añade una línea de código intermedio */
   private void emit(String s) {
     codigo.add("    " + s);
+  }
+
+  /* Imprime variables usadas */
+  private void imprimirVariables() {
+    if (!variables.isEmpty()) {
+      System.out.println("* Variables utilizadas: " + variables);
+    }
   }
 
   /* Clase auxiliar para expresiones booleanas */
@@ -73,6 +87,7 @@ public class CobolCompiler {
     for (String s : parser.codigo) {
       System.out.println(s);
     }
+    parser.imprimirVariables();
   }
 }
 
@@ -255,28 +270,33 @@ void assig() :
 {
   < MOVE > e1 = expr() < TO > id = <ID>
   {
+    registrarVariable(id.image);
     emit(id.image + " := " + e1);
   }
 | < ADD > e1 = expr() < TO > id = <ID>
   {
+    registrarVariable(id.image);
     t = nuevaTemp();
     emit(t + " := " + id.image + " + " + e1);
     emit(id.image + " := " + t);
   }
 | < SUBTRACT > e1 = expr() < FROM > id = <ID>
   {
+    registrarVariable(id.image);
     t = nuevaTemp();
     emit(t + " := " + id.image + " - " + e1);
     emit(id.image + " := " + t);
   }
 | < MULTIPLY > e1 = expr() < BY > e2 = expr() < GIVING > id = <ID>
   {
+    registrarVariable(id.image);
     t = nuevaTemp();
     emit(t + " := " + e1 + " * " + e2);
     emit(id.image + " := " + t);
   }
 | < DIVIDE > e1 = expr() < BY > e2 = expr() < GIVING > id = <ID>
   {
+    registrarVariable(id.image);
     t = nuevaTemp();
     emit(t + " := " + e1 + " / " + e2);
     emit(id.image + " := " + t);
@@ -288,6 +308,7 @@ void assig() :
 void io() :
 {
   String l;
+  Token id;
 }
 {
   < DISPLAY > l = literal()
@@ -300,7 +321,11 @@ void io() :
       emit("print " + l);
     }
   )*
-| < ACCEPT > <ID>
+| < ACCEPT > id = <ID>
+  {
+    registrarVariable(id.image);
+    emit("read " + id.image);
+  }
 }
 
 /* ---------- EXPRESIONES ---------- */
