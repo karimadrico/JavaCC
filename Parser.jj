@@ -9,7 +9,7 @@ import java.io.*;
 
 public class CobolCompiler {
 
-  /* Guardamos las variables usadas (informativo) */
+  /* Guardamos las variables usadas */
   private Set<String> variables = new HashSet<>();
 
   /* Código intermedio en tres direcciones */
@@ -79,6 +79,14 @@ public class CobolCompiler {
 PARSER_END(CobolCompiler)
 
 /* ===================== SKIP ===================== */
+
+/* Punto 6: comentarios COBOL de línea completa
+   * en columna 7 (seis espacios + asterisco) */
+SKIP :
+{
+  (" " " " " " " " " " " " "*"
+   (~["\n","\r"])* )
+}
 
 /* Comentarios en línea *> */
 SKIP :
