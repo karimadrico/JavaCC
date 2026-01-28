@@ -4,34 +4,160 @@ import java.util.*;
 import java.io.*;
 
 public class CobolCompiler implements CobolCompilerConstants {
-  // Estructura para registrar variables usadas
-  private Set<String> variables = new HashSet<>();
-  // Lista para almacenar el código intermedio generado
-  private List<String> codigoIntermedio = new ArrayList<>();
 
-  public static void main(String[] args) throws Exception {
-    InputStream input;
-    if (args.length > 0) {
-      input = new FileInputStream(args[0]);
-    } else {
-      input = System.in;
-    }
-    CobolCompiler parser = new CobolCompiler(input);
-    parser.Program();
-    System.out.println("Programa analizado correctamente.\n\nVariables usadas:");
-    for (String v : parser.variables) {
-      System.out.println("  " + v);
-    }
-    System.out.println("\nC\u00f3digo intermedio generado:");
-    for (String linea : parser.codigoIntermedio) {
-      System.out.println(linea);
+  /* ============================================================
+     VARIABLES MIEMBRO - Gestión del estado del compilador
+     ============================================================ */
+
+  /** Conjunto de variables utilizadas en el programa.
+      Se registran automáticamente cuando se asignan valores.
+      Se imprime al final de la compilación para información. */
+  private Set<String> variables = new HashSet<>();
+
+  /** Lista que almacena todas las instrucciones del código intermedio.
+      Se genera de forma incremental durante el análisis sintáctico.
+      Se imprime línea por línea al finalizar la compilación. */
+  private List<String> codigo = new ArrayList<>();
+
+  /** Contador para generar nombres únicos de variables temporales.
+      Las temporales almacenan resultados intermedios de expresiones.
+      Formato: t1, t2, t3, ... */
+  private int tempCount = 1;
+
+  /** Contador para generar etiquetas únicas para saltos y bucles.
+      Las etiquetas se usan para control de flujo (if/goto, bucles).
+      Formato: L0, L1, L2, ... */
+  private int labelCount = 0;
+
+  /* ============================================================
+     MÉTODOS AUXILIARES - Generación de código intermedio
+     ============================================================ */
+
+  /** Genera un nuevo nombre de variable temporal único.
+      Usado para almacenar resultados de operaciones aritméticas. */
+  private String nuevaTemp() {
+    return "t" + (tempCount++);
+  }
+
+  /** Genera una nueva etiqueta única para saltos condicionales.
+      Usado para bucles e instrucciones IF/ELSE. */
+  private String nuevaEtiqueta() {
+    return "L" + (labelCount++);
+  }
+
+  /** Registra una variable cuando se asigna un valor.
+      Permite rastrear todas las variables utilizadas en el programa. */
+  private void registrarVariable(String var) {
+    if (var != null && !var.isEmpty()) {
+      variables.add(var);
     }
   }
 
-/* ====== GRAMÁTICA ====== */
-  final public void Program() throws ParseException {Token progName;
+  /** Añade una línea de código intermedio a la lista de salida.
+      Indenta automáticamente con 4 espacios para legibilidad. */
+  private void emit(String s) {
+    codigo.add("    " + s);
+  }
+
+  /** Imprime todas las variables utilizadas en el programa.
+      Se llama al final de la compilación para información de depuración. */
+  private void imprimirVariables() {
+    if (!variables.isEmpty()) {
+      System.out.println("* Variables utilizadas: " + variables);
+    }
+  }
+
+  /* ============================================================
+     CLASE AUXILIAR - Resultados de expresiones booleanas
+     ============================================================ */
+
+  /** Representa el resultado de una expresión booleana.
+      Almacena los operandos, el operador y si está negada.
+      Usado para generar instrucciones de salto condicional (if/goto).
+      
+      Ejemplo: "VAR IS GREATER THAN 5" almacena:
+        e1="VAR", e2="5", op=">", negated=false
+  */
+  static class BooleanResult {
+    String e1, e2, op;        // Operandos y operador
+    boolean negated;          // Flag para negación (IS NOT ...)
+
+    BooleanResult(String e1, String e2, String op, boolean neg) {
+      this.e1 = e1;
+      this.e2 = e2;
+      this.op = op;
+      this.negated = neg;
+    }
+  }
+
+  /** Genera código de salto cuando una expresión booleana es falsa.
+      Maneja inversión de operadores para la negación (NOT).
+      Ej: "IF x > 5" genera "if x <= 5 goto L0"
+  */
+  private void saltoFalso(BooleanResult br, String etiquetaFalsa) {
+    String op = br.op;
+
+    // Si la expresión está negada, invertir el operador
+    if (br.negated) {
+      if (op.equals(">")) op = "<=";
+      else if (op.equals("<")) op = ">=";
+      else if (op.equals("==")) op = "!=";
+    }
+
+    // Invertir el operador para generar salto cuando es falso
+    String opNeg;
+    if (op.equals(">")) opNeg = "<=";
+    else if (op.equals("<")) opNeg = ">=";
+    else if (op.equals("==")) opNeg = "!=";
+    else opNeg = "==";
+
+    emit("if " + br.e1 + " " + opNeg + " " + br.e2 + " goto " + etiquetaFalsa);
+  }
+
+  /** Método principal del compilador.
+      Lee un archivo COBOL o entrada estándar y genera código intermedio.
+      
+      Uso:
+        java CobolCompiler archivo.cbl    -> Lee desde archivo
+        java CobolCompiler                 -> Lee desde stdin
+  */
+  public static void main(String[] args) throws Exception {
+    // Determinar fuente de entrada: archivo o stdin
+    InputStream in = (args.length > 0) ? new FileInputStream(args[0]) : System.in;
+
+    // Crear instancia del parser
+    CobolCompiler parser = new CobolCompiler(in);
+
+    // Analizar el programa
+    parser.program();
+
+    // Imprimir código intermedio generado
+    for (String s : parser.codigo) {
+      System.out.println(s);
+    }
+
+    // Imprimir información de variables
+    parser.imprimirVariables();
+  }
+
+/* =====================================================================
+   ANÁLISIS SINTÁCTICO - GRAMÁTICA RECURSIVA DESCENDENTE
+   ===================================================================== */
+
+/** Regla raíz: Estructura de un programa COBOL simplificado
+    
+    Sintaxis COBOL:
+      PROGRAM nombre.
+        BEGIN
+          ... instrucciones ...
+        END.
+    
+    Genera: Solo análisis sintáctico (sin código intermedio)
+            Las instrucciones generan código en sus propias reglas
+*/
+  final public void program() throws ParseException {
     jj_consume_token(PROGRAM);
-    progName = jj_consume_token(ID);
+    jj_consume_token(ID);
     jj_consume_token(DOT);
     jj_consume_token(BEGIN);
     stmts();
@@ -39,21 +165,28 @@ public class CobolCompiler implements CobolCompilerConstants {
     jj_consume_token(DOT);
 }
 
+/** Secuencia de cero o más instrucciones (statements)
+    
+    Sirve como contenedor flexible para:
+    - Bucles (loop)
+    - Condicionales (cond)
+    - Asignaciones (assig)
+    - E/S (io)
+*/
   final public void stmts() throws ParseException {
     label_1:
     while (true) {
       switch ((jj_ntk==-1)?jj_ntk_f():jj_ntk) {
-      case LEE:
-      case MUESTRA:
-      case SUMA:
-      case RESTA:
-      case MULTIPLICA:
+      case IF:
+      case WHILE:
+      case VARYING:
+      case MOVE:
+      case ADD:
+      case SUBTRACT:
+      case MULTIPLY:
       case DIVIDE:
-      case MUEVE:
-      case CALCULA:
-      case SI:
-      case EJECUTA:
-      case ID:{
+      case ACCEPT:
+      case DISPLAY:{
         ;
         break;
         }
@@ -65,31 +198,38 @@ public class CobolCompiler implements CobolCompilerConstants {
     }
 }
 
+/** Una instrucción individual puede ser:
+    - Un bucle (WHILE o VARYING)
+    - Un condicional (IF...THEN...ELSE...END)
+    - Una asignación (MOVE, ADD, SUBTRACT, MULTIPLY, DIVIDE)
+    - Una operación de E/S (DISPLAY o ACCEPT)
+    
+    Todas terminan con punto (.)
+*/
   final public void stmt() throws ParseException {
     switch ((jj_ntk==-1)?jj_ntk_f():jj_ntk) {
-    case EJECUTA:
-    case ID:{
+    case WHILE:
+    case VARYING:{
       loop();
       jj_consume_token(DOT);
       break;
       }
-    case SI:{
+    case IF:{
       cond();
       jj_consume_token(DOT);
       break;
       }
-    case SUMA:
-    case RESTA:
-    case MULTIPLICA:
-    case DIVIDE:
-    case MUEVE:
-    case CALCULA:{
+    case MOVE:
+    case ADD:
+    case SUBTRACT:
+    case MULTIPLY:
+    case DIVIDE:{
       assig();
       jj_consume_token(DOT);
       break;
       }
-    case LEE:
-    case MUESTRA:{
+    case ACCEPT:
+    case DISPLAY:{
       io();
       jj_consume_token(DOT);
       break;
@@ -101,56 +241,88 @@ public class CobolCompiler implements CobolCompilerConstants {
     }
 }
 
-// Entrada y salida
-  final public void io() throws ParseException {
-    Token id = null;
+/* ===== BUCLES (loop) ===== */
+
+/** Regla de bucles: Soporta WHILE y VARYING
+    
+    Bucle WHILE:
+      WHILE condición DO
+        ... instrucciones ...
+      END
+    
+    Bucle VARYING (contador):
+      VARYING variable [FROM inicio] TO fin [BY incremento] DO
+        ... instrucciones ...
+      END
+    
+    Generación de código:
+    - WHILE: Genera etiqueta de inicio, salto condicional, salto atrás
+    - VARYING: Similar, pero inicializa contador y genera incremento
+*/
+  final public void loop() throws ParseException {BooleanResult br;
+  String lIni, lFin;
+  Token id;
+  String ini, fin, paso;
     switch ((jj_ntk==-1)?jj_ntk_f():jj_ntk) {
-    case LEE:{
-      jj_consume_token(LEE);
+    case WHILE:{
+      jj_consume_token(WHILE);
+// Crear etiquetas para saltos
+    lIni = nuevaEtiqueta();  // Etiqueta al inicio del bucle (para volver)
+    lFin = nuevaEtiqueta();  // Etiqueta al final (para salir)
+    emit(lIni + ":");        // Marcar inicio del bucle
+
+      br = booleanExpr();
+      jj_consume_token(DO);
+// Si la condición es falsa, saltar al final
+    saltoFalso(br, lFin);
+      stmts();
+      jj_consume_token(END);
+// Volver al inicio del bucle y marcar el fin
+    emit("goto " + lIni);
+    emit(lFin + ":");
+      break;
+      }
+    case VARYING:{
+      jj_consume_token(VARYING);
       id = jj_consume_token(ID);
-      variables.add(id.image);
-      codigoIntermedio.add("READ " + id.image);
-      break;
-      }
-    case MUESTRA:{
-      jj_consume_token(MUESTRA);
-      literal();
+// Registrar variable de iteración
+    registrarVariable(id.image);
+    lIni = nuevaEtiqueta();  // Etiqueta de condición
+    lFin = nuevaEtiqueta();  // Etiqueta de salida
 
-      label_2:
-      while (true) {
-        switch ((jj_ntk==-1)?jj_ntk_f():jj_ntk) {
-        case COMA:{
-          ;
-          break;
-          }
-        default:
-          jj_la1[2] = jj_gen;
-          break label_2;
+      switch ((jj_ntk==-1)?jj_ntk_f():jj_ntk) {
+      case FROM:{
+        jj_consume_token(FROM);
+        ini = atomic();
+        break;
         }
-        jj_consume_token(COMA);
-        literal();
-
+      default:
+        jj_la1[2] = jj_gen;
+ini = "1";
       }
-      break;
+      jj_consume_token(TO);
+      fin = atomic();
+      switch ((jj_ntk==-1)?jj_ntk_f():jj_ntk) {
+      case BY:{
+        jj_consume_token(BY);
+        paso = atomic();
+        break;
+        }
+      default:
+        jj_la1[3] = jj_gen;
+paso = "1";
       }
-    default:
-      jj_la1[3] = jj_gen;
-      jj_consume_token(-1);
-      throw new ParseException();
-    }
-}
-
-// Un literal puede ser ID, NUM o cadena
-  final public void literal() throws ParseException {
-    switch ((jj_ntk==-1)?jj_ntk_f():jj_ntk) {
-    case ID:{
-      jj_consume_token(ID);
-variables.add(token.image); codigoIntermedio.add("PRINT " + token.image);
-      break;
-      }
-    case NUM:{
-      jj_consume_token(NUM);
-codigoIntermedio.add("PRINT " + token.image);
+      jj_consume_token(DO);
+// Inicializar contador y establecer condición
+    emit(id.image + " := " + ini);
+    emit(lIni + ":");
+    emit("if " + id.image + " > " + fin + " goto " + lFin);
+      stmts();
+      jj_consume_token(END);
+// Incrementar contador y volver a la condición
+    emit(id.image + " := " + id.image + " + " + paso);
+    emit("goto " + lIni);
+    emit(lFin + ":");
       break;
       }
     default:
@@ -160,94 +332,182 @@ codigoIntermedio.add("PRINT " + token.image);
     }
 }
 
-// Asignaciones: SUMA y RESTA
-  final public void assig() throws ParseException {
+/* ===== CONDICIONALES (cond) ===== */
+
+/** Regla de condicional: IF...THEN...ELSE...END
+    
+    Sintaxis:
+      IF condición THEN
+        ... rama verdadera ...
+      [ELSE
+        ... rama falsa ...]
+      END
+    
+    Generación de código:
+    - Salto a ELSE si la condición es falsa
+    - Salto al final después de rama verdadera
+    - Rama ELSE es opcional
+*/
+  final public void cond() throws ParseException {BooleanResult br;
+  String lElse, lFin;
+    jj_consume_token(IF);
+    br = booleanExpr();
+    jj_consume_token(THEN);
+// Crear etiquetas para saltos
+    lElse = nuevaEtiqueta();  // Etiqueta de rama ELSE
+    lFin = nuevaEtiqueta();   // Etiqueta al final
+    saltoFalso(br, lElse);    // Si falsa, ir a ELSE
+
+    stmts();
+// Saltar al final si ejecutamos rama THEN
+    emit("goto " + lFin);
+    emit(lElse + ":");        // Marcar inicio de ELSE
+
     switch ((jj_ntk==-1)?jj_ntk_f():jj_ntk) {
-    case SUMA:{
-      jj_consume_token(SUMA);
-      valor();
-      label_3:
-      while (true) {
-        switch ((jj_ntk==-1)?jj_ntk_f():jj_ntk) {
-        case PARENOPEN:
-        case ID:
-        case NUM:{
-          ;
-          break;
-          }
-        default:
-          jj_la1[5] = jj_gen;
-          break label_3;
-        }
-        valor();
-      }
-      jj_consume_token(A);
-      jj_consume_token(ID);
+    case ELSE:{
+      jj_consume_token(ELSE);
+      stmts();
       break;
       }
-    case RESTA:{
-      jj_consume_token(RESTA);
-      valor();
-      label_4:
-      while (true) {
-        switch ((jj_ntk==-1)?jj_ntk_f():jj_ntk) {
-        case PARENOPEN:
-        case ID:
-        case NUM:{
-          ;
-          break;
-          }
-        default:
-          jj_la1[6] = jj_gen;
-          break label_4;
-        }
-        valor();
-      }
-      jj_consume_token(DE);
-      jj_consume_token(ID);
+    default:
+      jj_la1[5] = jj_gen;
+      ;
+    }
+    jj_consume_token(END);
+emit(lFin + ":");         // Marcar fin del condicional
+
+}
+
+/* ===== ASIGNACIONES (assig) ===== */
+
+/** Regla de asignaciones: Múltiples formas de asignación
+    
+    1. MOVE expresión TO variable
+       → variable := expresión
+    
+    2. ADD expresión TO variable
+       → variable := variable + expresión
+    
+    3. SUBTRACT expresión FROM variable
+       → variable := variable - expresión
+    
+    4. MULTIPLY expr BY expr GIVING variable
+       → variable := expr1 * expr2
+    
+    5. DIVIDE expr BY expr GIVING variable
+       → variable := expr1 / expr2
+    
+    Nota: Las operaciones usan temporales para guardar resultados
+*/
+  final public void assig() throws ParseException {String e1, e2, t;
+  Token id;
+    switch ((jj_ntk==-1)?jj_ntk_f():jj_ntk) {
+    case MOVE:{
+      jj_consume_token(MOVE);
+      e1 = expr();
+      jj_consume_token(TO);
+      id = jj_consume_token(ID);
+registrarVariable(id.image);
+    emit(id.image + " := " + e1);
       break;
       }
-    case MULTIPLICA:{
-      jj_consume_token(MULTIPLICA);
-      valor();
-      jj_consume_token(POR);
-      jj_consume_token(ID);
+    case ADD:{
+      jj_consume_token(ADD);
+      e1 = expr();
+      jj_consume_token(TO);
+      id = jj_consume_token(ID);
+registrarVariable(id.image);
+    t = nuevaTemp();
+    emit(t + " := " + id.image + " + " + e1);
+    emit(id.image + " := " + t);
+      break;
+      }
+    case SUBTRACT:{
+      jj_consume_token(SUBTRACT);
+      e1 = expr();
+      jj_consume_token(FROM);
+      id = jj_consume_token(ID);
+registrarVariable(id.image);
+    t = nuevaTemp();
+    emit(t + " := " + id.image + " - " + e1);
+    emit(id.image + " := " + t);
+      break;
+      }
+    case MULTIPLY:{
+      jj_consume_token(MULTIPLY);
+      e1 = expr();
+      jj_consume_token(BY);
+      e2 = expr();
+      jj_consume_token(GIVING);
+      id = jj_consume_token(ID);
+registrarVariable(id.image);
+    t = nuevaTemp();
+    emit(t + " := " + e1 + " * " + e2);
+    emit(id.image + " := " + t);
       break;
       }
     case DIVIDE:{
       jj_consume_token(DIVIDE);
-      valor();
-      jj_consume_token(ENTRE);
-      jj_consume_token(ID);
+      e1 = expr();
+      jj_consume_token(BY);
+      e2 = expr();
+      jj_consume_token(GIVING);
+      id = jj_consume_token(ID);
+registrarVariable(id.image);
+    t = nuevaTemp();
+    emit(t + " := " + e1 + " / " + e2);
+    emit(id.image + " := " + t);
       break;
       }
-    case MUEVE:{
-      jj_consume_token(MUEVE);
-      valor();
-      jj_consume_token(A);
-      jj_consume_token(ID);
+    default:
+      jj_la1[6] = jj_gen;
+      jj_consume_token(-1);
+      throw new ParseException();
+    }
+}
+
+/* ===== E/S (io) ===== */
+
+/** Regla de entrada/salida
+    
+    DISPLAY: Escribe a salida estándar
+      - Puede ser múltiples valores separados por comas
+      - Cada valor genera una instrucción 'print'
+      - Ejemplo: DISPLAY "X=", X, ", Y=", Y
+    
+    ACCEPT: Lee desde entrada estándar
+      - Genera instrucción 'read' para la variable
+      - La variable se registra como utilizada
+*/
+  final public void io() throws ParseException {String l;
+  Token id;
+    switch ((jj_ntk==-1)?jj_ntk_f():jj_ntk) {
+    case DISPLAY:{
+      jj_consume_token(DISPLAY);
+      l = literal();
+emit("print " + l);
+      label_2:
+      while (true) {
+        switch ((jj_ntk==-1)?jj_ntk_f():jj_ntk) {
+        case 39:{
+          ;
+          break;
+          }
+        default:
+          jj_la1[7] = jj_gen;
+          break label_2;
+        }
+        jj_consume_token(39);
+        l = literal();
+emit("print " + l);
+      }
       break;
       }
-    case CALCULA:{
-      jj_consume_token(CALCULA);
-      jj_consume_token(ID);
-      switch ((jj_ntk==-1)?jj_ntk_f():jj_ntk) {
-      case IGUAL_OP:{
-        jj_consume_token(IGUAL_OP);
-        valor();
-        jj_consume_token(FIN_CALCULA);
-        break;
-        }
-      case COMO:{
-        jj_consume_token(COMO);
-        valor();
-        break;
-        }
-      default:
-        jj_la1[7] = jj_gen;
-        jj_consume_token(-1);
-        throw new ParseException();
-      }
+    case ACCEPT:{
+      jj_consume_token(ACCEPT);
+      id = jj_consume_token(ID);
+registrarVariable(id.image);
+    emit("read " + id.image);
       break;
       }
     default:
@@ -257,22 +517,27 @@ codigoIntermedio.add("PRINT " + token.image);
     }
 }
 
-// Un valor puede ser ID, NUM o una expresión entre paréntesis
-  final public void valor() throws ParseException {
+/* ===== EXPRESIONES ===== */
+
+/** Regla de literales: Identifica valores constantes o variables
+    
+    Puede ser:
+    - ID: nombre de variable (A-Z, dígitos, guiones)
+    - NUM: número (entero, decimal, científico)
+    - CAD: cadena de texto (entre comillas)
+*/
+  final public String literal() throws ParseException {Token t;
     switch ((jj_ntk==-1)?jj_ntk_f():jj_ntk) {
     case ID:{
-      jj_consume_token(ID);
-variables.add(token.image);
+      t = jj_consume_token(ID);
       break;
       }
     case NUM:{
-      jj_consume_token(NUM);
+      t = jj_consume_token(NUM);
       break;
       }
-    case PARENOPEN:{
-      jj_consume_token(PARENOPEN);
-      valor();
-      jj_consume_token(PARENCLOSE);
+    case CAD:{
+      t = jj_consume_token(CAD);
       break;
       }
     default:
@@ -280,103 +545,235 @@ variables.add(token.image);
       jj_consume_token(-1);
       throw new ParseException();
     }
+{if ("" != null) return t.image;}
+    throw new Error("Missing return statement in function");
 }
 
-  final public void loop() throws ParseException {
+/** Regla de valores atómicos: Para inicializadores y límites
+    
+    Puede ser:
+    - ID: nombre de variable
+    - NUM: valor numérico
+    
+    (No permite literales de texto como los literales normales)
+*/
+  final public String atomic() throws ParseException {Token t;
     switch ((jj_ntk==-1)?jj_ntk_f():jj_ntk) {
-    case EJECUTA:{
-      jj_consume_token(EJECUTA);
-      stmts();
-      jj_consume_token(HASTA_QUE);
-      cond();
-      jj_consume_token(FIN_EJECUTA);
+    case ID:{
+      t = jj_consume_token(ID);
       break;
       }
-    case ID:{
-      jj_consume_token(ID);
-      jj_consume_token(IGUAL_OP);
-      jj_consume_token(NUM);
+    case NUM:{
+      t = jj_consume_token(NUM);
+      break;
+      }
+    default:
+      jj_la1[10] = jj_gen;
+      jj_consume_token(-1);
+      throw new ParseException();
+    }
+{if ("" != null) return t.image;}
+    throw new Error("Missing return statement in function");
+}
+
+/** Regla de expresiones aritméticas: Precedencia de operadores
+    
+    Precedencia (de mayor a menor):
+    1. Paréntesis y valores (val)
+    2. Multiplicación y división (mult)
+    3. Suma y resta (expr) ← Raíz
+    
+    Ejemplo: 2 + 3 * 4 = 2 + (3*4) = 2 + 12 = 14
+    
+    Generación de código: 
+    - Cada operación genera una temporal
+    - Construye árbol de temporales
+*/
+  final public String expr() throws ParseException {String a, b, t;
+    a = mult();
+    label_3:
+    while (true) {
       switch ((jj_ntk==-1)?jj_ntk_f():jj_ntk) {
-      case A:{
-        jj_consume_token(A);
-        jj_consume_token(NUM);
-        switch ((jj_ntk==-1)?jj_ntk_f():jj_ntk) {
-        case POR:{
-          jj_consume_token(POR);
-          jj_consume_token(NUM);
-          break;
-          }
-        default:
-          jj_la1[10] = jj_gen;
-          ;
-        }
+      case 40:
+      case 41:{
+        ;
         break;
         }
       default:
         jj_la1[11] = jj_gen;
+        break label_3;
+      }
+      switch ((jj_ntk==-1)?jj_ntk_f():jj_ntk) {
+      case 40:{
+        jj_consume_token(40);
+        b = mult();
+t = nuevaTemp();
+      emit(t + " := " + a + " + " + b);
+      a = t;
+        break;
+        }
+      case 41:{
+        jj_consume_token(41);
+        b = mult();
+t = nuevaTemp();
+      emit(t + " := " + a + " - " + b);
+      a = t;
+        break;
+        }
+      default:
+        jj_la1[12] = jj_gen;
+        jj_consume_token(-1);
+        throw new ParseException();
+      }
+    }
+{if ("" != null) return a;}
+    throw new Error("Missing return statement in function");
+}
+
+/** Regla de multiplicación y división
+    
+    Maneja * y / con mayor precedencia que + y -
+    Se recursiona en val() para paréntesis
+*/
+  final public String mult() throws ParseException {String a, b, t;
+    a = val();
+    label_4:
+    while (true) {
+      switch ((jj_ntk==-1)?jj_ntk_f():jj_ntk) {
+      case 42:
+      case 43:{
         ;
+        break;
+        }
+      default:
+        jj_la1[13] = jj_gen;
+        break label_4;
       }
-      jj_consume_token(VECES);
-      stmts();
-      jj_consume_token(FIN_EJECUTA);
-      break;
+      switch ((jj_ntk==-1)?jj_ntk_f():jj_ntk) {
+      case 42:{
+        jj_consume_token(42);
+        b = val();
+t = nuevaTemp();
+      emit(t + " := " + a + " * " + b);
+      a = t;
+        break;
+        }
+      case 43:{
+        jj_consume_token(43);
+        b = val();
+t = nuevaTemp();
+      emit(t + " := " + a + " / " + b);
+      a = t;
+        break;
+        }
+      default:
+        jj_la1[14] = jj_gen;
+        jj_consume_token(-1);
+        throw new ParseException();
       }
-    default:
-      jj_la1[12] = jj_gen;
-      jj_consume_token(-1);
-      throw new ParseException();
     }
+{if ("" != null) return a;}
+    throw new Error("Missing return statement in function");
 }
 
-  final public void cond() throws ParseException {
-    jj_consume_token(SI);
-    expr();
-    jj_consume_token(ENTONCES);
-    stmts();
+/** Regla de valores: Nivel más bajo de precedencia
+    
+    Puede ser:
+    - NUM: un número (retorna como es)
+    - ID: una variable (retorna nombre)
+    - (expr): expresión entre paréntesis (resuelve primero)
+*/
+  final public String val() throws ParseException {Token t;
+  String e;
     switch ((jj_ntk==-1)?jj_ntk_f():jj_ntk) {
-    case SINO:{
-      jj_consume_token(SINO);
-      stmts();
+    case NUM:{
+      t = jj_consume_token(NUM);
+{if ("" != null) return t.image;}
       break;
       }
-    default:
-      jj_la1[13] = jj_gen;
-      ;
-    }
-    jj_consume_token(FIN_SI);
-}
-
-// Expresión booleana simple para condicionales y bucles
-  final public void expr() throws ParseException {
-    valor();
-    switch ((jj_ntk==-1)?jj_ntk_f():jj_ntk) {
-    case MAYOR:{
-      jj_consume_token(MAYOR);
+    case ID:{
+      t = jj_consume_token(ID);
+{if ("" != null) return t.image;}
       break;
       }
-    case MENOR:{
-      jj_consume_token(MENOR);
-      break;
-      }
-    case IGUAL:{
-      jj_consume_token(IGUAL);
-      break;
-      }
-    default:
-      jj_la1[14] = jj_gen;
-      jj_consume_token(-1);
-      throw new ParseException();
-    }
-    valor();
-    switch ((jj_ntk==-1)?jj_ntk_f():jj_ntk) {
-    case NO:{
-      jj_consume_token(NO);
+    case PA:{
+      jj_consume_token(PA);
+      e = expr();
+      jj_consume_token(PC);
+{if ("" != null) return e;}
       break;
       }
     default:
       jj_la1[15] = jj_gen;
+      jj_consume_token(-1);
+      throw new ParseException();
+    }
+    throw new Error("Missing return statement in function");
+}
+
+/* ===== EXPRESIONES BOOLEANAS (booleanExpr) ===== */
+
+/** Regla de expresiones booleanas: Comparaciones
+    
+    Formato general:
+      expresión IS [NOT] (GREATER/LESS/EQUAL) THAN expresión
+    
+    Ejemplos:
+    - X IS GREATER THAN 5
+    - Y IS NOT EQUAL TO 10
+    - Z IS LESS THAN 100
+    
+    Operadores soportados:
+    - GREATER THAN (>)
+    - LESS THAN (<)
+    - EQUAL TO (==)
+    
+    Retorna BooleanResult con:
+    - e1, e2: operandos
+    - op: operador
+    - negated: flag IS NOT
+*/
+  final public BooleanResult booleanExpr() throws ParseException {String e1, e2, op;
+  boolean neg = false;
+    e1 = expr();
+    jj_consume_token(IS);
+    switch ((jj_ntk==-1)?jj_ntk_f():jj_ntk) {
+    case NOT:{
+      jj_consume_token(NOT);
+neg = true;
+      break;
+      }
+    default:
+      jj_la1[16] = jj_gen;
       ;
     }
+    switch ((jj_ntk==-1)?jj_ntk_f():jj_ntk) {
+    case GREATER:{
+      jj_consume_token(GREATER);
+      jj_consume_token(THAN);
+op = ">";
+      break;
+      }
+    case LESS:{
+      jj_consume_token(LESS);
+      jj_consume_token(THAN);
+op = "<";
+      break;
+      }
+    case EQUAL:{
+      jj_consume_token(EQUAL);
+      jj_consume_token(TO);
+op = "==";
+      break;
+      }
+    default:
+      jj_la1[17] = jj_gen;
+      jj_consume_token(-1);
+      throw new ParseException();
+    }
+    e2 = expr();
+{if ("" != null) return new BooleanResult(e1, e2, op, neg);}
+    throw new Error("Missing return statement in function");
 }
 
   /** Generated Token Manager. */
@@ -388,7 +785,7 @@ variables.add(token.image);
   public Token jj_nt;
   private int jj_ntk;
   private int jj_gen;
-  final private int[] jj_la1 = new int[16];
+  final private int[] jj_la1 = new int[18];
   static private int[] jj_la1_0;
   static private int[] jj_la1_1;
   static {
@@ -396,10 +793,10 @@ variables.add(token.image);
 	   jj_la1_init_1();
 	}
 	private static void jj_la1_init_0() {
-	   jj_la1_0 = new int[] {0x2203fc00,0x2203fc00,0x0,0xc00,0x0,0x0,0x0,0x40000,0x3f000,0x0,0x400000,0x200000,0x20000000,0x8000000,0x0,0x0,};
+	   jj_la1_0 = new int[] {0x7c014800,0x7c014800,0x20000,0x80000,0x14000,0x2000,0x7c000000,0x0,0x0,0x0,0x0,0x0,0x0,0x0,0x0,0x0,0x200000,0x1c00000,};
 	}
 	private static void jj_la1_init_1() {
-	   jj_la1_1 = new int[] {0x10000,0x10000,0x100,0x0,0x30000,0x32000,0x32000,0x8000,0x0,0x32000,0x0,0x0,0x10000,0x0,0x70,0x4,};
+	   jj_la1_1 = new int[] {0x3,0x3,0x0,0x0,0x0,0x0,0x0,0x80,0x3,0x70,0x30,0x300,0x300,0xc00,0xc00,0x34,0x0,0x0,};
 	}
 
   /** Constructor with InputStream. */
@@ -413,7 +810,7 @@ variables.add(token.image);
 	 token = new Token();
 	 jj_ntk = -1;
 	 jj_gen = 0;
-	 for (int i = 0; i < 16; i++) jj_la1[i] = -1;
+	 for (int i = 0; i < 18; i++) jj_la1[i] = -1;
   }
 
   /** Reinitialise. */
@@ -427,7 +824,7 @@ variables.add(token.image);
 	 token = new Token();
 	 jj_ntk = -1;
 	 jj_gen = 0;
-	 for (int i = 0; i < 16; i++) jj_la1[i] = -1;
+	 for (int i = 0; i < 18; i++) jj_la1[i] = -1;
   }
 
   /** Constructor. */
@@ -437,7 +834,7 @@ variables.add(token.image);
 	 token = new Token();
 	 jj_ntk = -1;
 	 jj_gen = 0;
-	 for (int i = 0; i < 16; i++) jj_la1[i] = -1;
+	 for (int i = 0; i < 18; i++) jj_la1[i] = -1;
   }
 
   /** Reinitialise. */
@@ -455,7 +852,7 @@ variables.add(token.image);
 	 token = new Token();
 	 jj_ntk = -1;
 	 jj_gen = 0;
-	 for (int i = 0; i < 16; i++) jj_la1[i] = -1;
+	 for (int i = 0; i < 18; i++) jj_la1[i] = -1;
   }
 
   /** Constructor with generated Token Manager. */
@@ -464,7 +861,7 @@ variables.add(token.image);
 	 token = new Token();
 	 jj_ntk = -1;
 	 jj_gen = 0;
-	 for (int i = 0; i < 16; i++) jj_la1[i] = -1;
+	 for (int i = 0; i < 18; i++) jj_la1[i] = -1;
   }
 
   /** Reinitialise. */
@@ -473,7 +870,7 @@ variables.add(token.image);
 	 token = new Token();
 	 jj_ntk = -1;
 	 jj_gen = 0;
-	 for (int i = 0; i < 16; i++) jj_la1[i] = -1;
+	 for (int i = 0; i < 18; i++) jj_la1[i] = -1;
   }
 
   private Token jj_consume_token(int kind) throws ParseException {
@@ -524,12 +921,12 @@ variables.add(token.image);
   /** Generate ParseException. */
   public ParseException generateParseException() {
 	 jj_expentries.clear();
-	 boolean[] la1tokens = new boolean[50];
+	 boolean[] la1tokens = new boolean[44];
 	 if (jj_kind >= 0) {
 	   la1tokens[jj_kind] = true;
 	   jj_kind = -1;
 	 }
-	 for (int i = 0; i < 16; i++) {
+	 for (int i = 0; i < 18; i++) {
 	   if (jj_la1[i] == jj_gen) {
 		 for (int j = 0; j < 32; j++) {
 		   if ((jj_la1_0[i] & (1<<j)) != 0) {
@@ -541,7 +938,7 @@ variables.add(token.image);
 		 }
 	   }
 	 }
-	 for (int i = 0; i < 50; i++) {
+	 for (int i = 0; i < 44; i++) {
 	   if (la1tokens[i]) {
 		 jj_expentry = new int[1];
 		 jj_expentry[0] = i;

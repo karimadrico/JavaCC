@@ -1,3 +1,34 @@
+/*
+ * -----------------------------------------------------------------------
+ * Práctica de JavaCC de 2ª convocatoria - Karima Drafli Rico
+ * -----------------------------------------------------------------------
+ * 
+ * La práctica hace lo siguiente:
+ *   Procesa programas COBOL simplificado (sintaxis en INGLÉS) y genera
+ *   código intermedio de tres direcciones. El compilador implementa:
+ *   - Análisis léxico: tokens (identificadores, números, palabras clave)
+ *   - Análisis sintáctico: gramática recursiva descendente
+ *   - Generación de código: código de tres direcciones con temporales
+ *
+ * Voy a explicar las características soportadas en mi código:
+ *   - Estructura: PROGRAM ... BEGIN ... END
+ *   - Comentarios: columna 7 (6 espacios + *) e inline (*>)
+ *   - Variables: letras mayúsculas, dígitos, guiones (A-Z, 0-9, -)
+ *   - Números: enteros, decimales (3.14), notación científica (2.5e-10)
+ *   - Literales: cadenas entre comillas simples o dobles
+ *   - Asignaciones: MOVE, ADD, SUBTRACT, MULTIPLY, DIVIDE
+ *   - E/S: DISPLAY (múltiples valores), ACCEPT (lectura)
+ *   - Condicionales: IF...THEN...ELSE...END (anidados)
+ *   - Bucles: WHILE...DO...END y VARYING...FROM...TO...BY
+ *   - Expresiones: aritméticas con precedencia (* / antes que + -)
+ *   - Comparaciones: IS [NOT] GREATER/LESS/EQUAL THAN
+ *
+ *
+ * Objetivo: Traducción a código intermedio para procesamiento posterior
+ *
+ * -----------------------------------------------------------------------
+ */
+
 options {
   STATIC = false;
 }
@@ -9,49 +40,82 @@ import java.io.*;
 
 public class CobolCompiler {
 
-  /* Guardamos las variables usadas */
+  /* -----------------------------------------------------------------------
+     VARIABLES MIEMBRO - Gestión del estado del compilador
+     ----------------------------------------------------------------------- */
+
+  /** Conjunto de variables utilizadas en el programa.
+      Se registran automáticamente cuando se asignan valores.
+      Se imprime al final de la compilación para información. */
   private Set<String> variables = new HashSet<>();
 
-  /* Código intermedio en tres direcciones */
+  /** Lista que almacena todas las instrucciones del código intermedio.
+      Se genera de forma incremental durante el análisis sintáctico.
+      Se imprime línea por línea al finalizar la compilación. */
   private List<String> codigo = new ArrayList<>();
 
-  /* Contadores para temporales y etiquetas */
+  /** Contador para generar nombres únicos de variables temporales.
+      Las temporales almacenan resultados intermedios de expresiones.
+      Formato: t1, t2, t3, ... */
   private int tempCount = 1;
+
+  /** Contador para generar etiquetas únicas para saltos y bucles.
+      Las etiquetas se usan para control de flujo (if/goto, bucles).
+      Formato: L0, L1, L2, ... */
   private int labelCount = 0;
 
-  /* Genera un nuevo temporal */
+  /* -----------------------------------------------------------------------
+     MÉTODOS AUXILIARES - Generación de código intermedio
+     ----------------------------------------------------------------------- */
+
+  /** Genera un nuevo nombre de variable temporal único.
+      Usado para almacenar resultados de operaciones aritméticas. */
   private String nuevaTemp() {
     return "t" + (tempCount++);
   }
 
-  /* Genera una nueva etiqueta */
+  /** Genera una nueva etiqueta única para saltos condicionales.
+      Usado para bucles e instrucciones IF/ELSE. */
   private String nuevaEtiqueta() {
     return "L" + (labelCount++);
   }
 
-  /* Registra una variable */
+  /** Registra una variable cuando se asigna un valor.
+      Permite rastrear todas las variables utilizadas en el programa. */
   private void registrarVariable(String var) {
     if (var != null && !var.isEmpty()) {
       variables.add(var);
     }
   }
 
-  /* Añade una línea de código intermedio */
+  /** Añade una línea de código intermedio a la lista de salida.
+      Automáticamente con 4 espacios para legibilidad. */
   private void emit(String s) {
     codigo.add("    " + s);
   }
 
-  /* Imprime variables usadas */
+  /** Imprime todas las variables utilizadas en el programa.
+      Se llama al final de la compilación para información de depuración. */
   private void imprimirVariables() {
     if (!variables.isEmpty()) {
       System.out.println("* Variables utilizadas: " + variables);
     }
   }
 
-  /* Clase auxiliar para expresiones booleanas */
+  /* -----------------------------------------------------------------------
+     CLASE AUXILIAR - Resultados de expresiones booleanas
+      ----------------------------------------------------------------------- */
+
+  /** Representa el resultado de una expresión booleana.
+      Almacena los operandos, el operador y si está negada.
+      Usado para generar instrucciones de salto condicional (if/goto).
+      
+      Ejemplo: "VAR IS GREATER THAN 5" almacena:
+        e1="VAR", e2="5", op=">", negated=false
+  */
   static class BooleanResult {
-    String e1, e2, op;
-    boolean negated;
+    String e1, e2, op;        // Operandos y operador
+    boolean negated;          // para negación (IS NOT ...)
 
     BooleanResult(String e1, String e2, String op, boolean neg) {
       this.e1 = e1;
@@ -61,16 +125,21 @@ public class CobolCompiler {
     }
   }
 
-  /* Genera el salto cuando la condición es falsa */
+  /** Genera código de salto cuando una expresión booleana es falsa.
+      Maneja inversión de operadores para la negación (NOT).
+      Ej: "IF x > 5" genera "if x <= 5 goto L0"
+  */
   private void saltoFalso(BooleanResult br, String etiquetaFalsa) {
     String op = br.op;
 
+    // Si la expresión está negada, invertir el operador
     if (br.negated) {
       if (op.equals(">")) op = "<=";
       else if (op.equals("<")) op = ">=";
       else if (op.equals("==")) op = "!=";
     }
 
+    // Invertir el operador para generar salto cuando es falso
     String opNeg;
     if (op.equals(">")) opNeg = "<=";
     else if (op.equals("<")) opNeg = ">=";
@@ -80,59 +149,108 @@ public class CobolCompiler {
     emit("if " + br.e1 + " " + opNeg + " " + br.e2 + " goto " + etiquetaFalsa);
   }
 
+  /** Método principal del compilador.
+      Lee archivo COBOL o entrada estándar y genera código intermedio.
+      
+      Uso:
+        java CobolCompiler archivo.cbl    -> Lee desde archivo
+        java CobolCompiler                 -> Lee desde stdin
+  */
   public static void main(String[] args) throws Exception {
+    // Determinar fuente de entrada: archivo o stdin
     InputStream in = (args.length > 0) ? new FileInputStream(args[0]) : System.in;
+    
+    // Crear instancia del parser
     CobolCompiler parser = new CobolCompiler(in);
+    
+    // Analizar el programa
     parser.program();
+    
+    // Imprimir código intermedio generado
     for (String s : parser.codigo) {
       System.out.println(s);
     }
+    
+    // Imprimir información de variables
     parser.imprimirVariables();
   }
 }
 
 PARSER_END(CobolCompiler)
 
-/* ===================== SKIP ===================== */
+/* -----------------------------------------------------------------------
+   ANÁLISIS LÉXICO - TOKENS A IGNORAR (SKIP)
+   ----------------------------------------------------------------------- */
 
-/* Comentarios de línea completa: 6 espacios + asterisco */
+/** Comentarios de línea completa (estándar COBOL)
+    Se especifican en la columna 7: 6 espacios seguidos de asterisco (*)
+    Ejemplo: "      * Esta es una línea de comentario"
+    Todo el resto de la línea es ignorado */
 SKIP :
 {
   < LINECOMMENT: "      " "*" (~["\n","\r"])* >
 }
 
-/* Comentarios en línea *> */
+/** Comentarios en línea con marca *>
+    Pueden aparecer al final de cualquier línea
+    Ejemplo: "MOVE 5 TO X.  *> Asignar 5 a la variable X"
+    Todo desde *> hasta el final de línea es ignorado */
 SKIP :
 {
   < INLINECOMMENT: "*>" (~["\n","\r"])* >
 }
 
-/* Espacios en blanco */
+/** Espacios en blanco ignorados
+    No tienen significado sintáctico en COBOL */
 SKIP :
 {
   " " | "\t" | "\n" | "\r"
 }
 
-/* ===================== TOKENS ===================== */
+/* -----------------------------------------------------------------------
+   ANÁLISIS LÉXICO - DEFINICIÓN DE TOKENS
+   ----------------------------------------------------------------------- */
 
+/** Puntuación: Punto final (.) */
 TOKEN : { < DOT: "." > }
 
+/** Palabras clave de estructura de programa
+    PROGRAM: Inicio de programa
+    BEGIN: Inicio de bloque ejecutable
+    END: Fin de bloque (programa, condicional, bucle) */
 TOKEN : { < PROGRAM: "PROGRAM" > }
 TOKEN : { < BEGIN: "BEGIN" > }
 TOKEN : { < END: "END" > }
 
+/** Palabras clave para condicionales (IF...THEN...ELSE)
+    IF: Inicio de condicional
+    THEN: Rama verdadera
+    ELSE: Rama alternativa (opcional) */
 TOKEN : { < IF: "IF" > }
 TOKEN : { < THEN: "THEN" > }
 TOKEN : { < ELSE: "ELSE" > }
 
+/** Palabras clave para bucles
+    WHILE: Bucle condicional (repetir mientras se cumpla condición)
+    DO: Marca el inicio del cuerpo del bucle */
 TOKEN : { < WHILE: "WHILE" > }
 TOKEN : { < DO: "DO" > }
 
+/** Palabras clave para bucle de iteración controlada
+    VARYING: Bucle contador (similar a FOR)
+    FROM: Valor inicial del contador
+    TO: Valor final (límite)
+    BY: Incremento en cada iteración */
 TOKEN : { < VARYING: "VARYING" > }
 TOKEN : { < FROM: "FROM" > }
 TOKEN : { < TO: "TO" > }
 TOKEN : { < BY: "BY" > }
 
+/** Palabras clave para expresiones booleanas
+    IS: Operador de comparación
+    NOT: Negación (IS NOT ...)
+    GREATER/LESS/EQUAL: Operadores de relación
+    THAN: Completador sintáctico ("GREATER THAN 5") */
 TOKEN : { < IS: "IS" > }
 TOKEN : { < NOT: "NOT" > }
 TOKEN : { < GREATER: "GREATER" > }
@@ -140,6 +258,10 @@ TOKEN : { < LESS: "LESS" > }
 TOKEN : { < EQUAL: "EQUAL" > }
 TOKEN : { < THAN: "THAN" > }
 
+/** Palabras clave para asignaciones
+    MOVE: Asignación simple (MOVE valor TO variable)
+    ADD/SUBTRACT/MULTIPLY/DIVIDE: Operaciones (ADD a TO b GIVING c)
+    GIVING: Indica variable destino en operaciones aritméticas */
 TOKEN : { < MOVE: "MOVE" > }
 TOKEN : { < ADD: "ADD" > }
 TOKEN : { < SUBTRACT: "SUBTRACT" > }
@@ -147,12 +269,36 @@ TOKEN : { < MULTIPLY: "MULTIPLY" > }
 TOKEN : { < DIVIDE: "DIVIDE" > }
 TOKEN : { < GIVING: "GIVING" > }
 
+/** Palabras clave para entrada/salida
+    ACCEPT: Lee desde entrada estándar
+    DISPLAY: Escribe a salida estándar (puede ser múltiple) */
 TOKEN : { < ACCEPT: "ACCEPT" > }
 TOKEN : { < DISPLAY: "DISPLAY" > }
 
+/** Operadores: Paréntesis para agrupar expresiones
+    PA: Paréntesis abierto (
+    PC: Paréntesis cerrado ) */
 TOKEN : { < PA: "(" > }
 TOKEN : { < PC: ")" > }
 
+/** Tokens complejos: Identificadores, números y cadenas
+    
+    ID: Identificadores de variables (nombres en COBOL)
+        - Comienza con letra mayúscula (A-Z)
+        - Seguido por letras, dígitos o guiones (A-Z, 0-9, -)
+        - Ejemplo: VAR, CONTADOR, TEMPERATURA-ACTUAL
+    
+    NUM: Números en varias formas
+        - Enteros: 42, 1000
+        - Decimales: 3.14, 0.5
+        - Notación científica: 1.5e10, 2.5e-3
+        - Patrón: (dígitos)+ ("." dígitos+)? ([eE] [+-]? dígitos+)?
+    
+    CAD: Cadenas de texto (literales)
+        - Entre comillas dobles: "Hola Mundo"
+        - O entre comillas simples: 'Hola Mundo'
+        - Puede contener cualquier carácter excepto la comilla delimitadora
+*/
 TOKEN :
 {
   < ID: (["A"-"Z"])(["A"-"Z","0"-"9","-"])* >
@@ -160,8 +306,21 @@ TOKEN :
 | < CAD: "\"" (~["\""])* "\"" | "'" (~["'"])* "'" >
 }
 
-/* ===================== GRAMÁTICA ===================== */
+/* -----------------------------------------------------------------------
+   ANÁLISIS SINTÁCTICO - GRAMÁTICA RECURSIVA DESCENDENTE
+   ----------------------------------------------------------------------- */
 
+/** Regla raíz: Estructura de un programa COBOL
+    
+    Sintaxis COBOL:
+      PROGRAM nombre.
+        BEGIN
+          ... instrucciones ...
+        END.
+    
+    Genera: Solo análisis sintáctico (sin código intermedio)
+            Las instrucciones generan código en sus propias reglas
+*/
 void program() : {}
 {
   < PROGRAM > < ID > < DOT >
@@ -170,11 +329,27 @@ void program() : {}
   < END > < DOT >
 }
 
+/** Secuencia de cero o más instrucciones (statements)
+    
+    Sirve como contenedor flexible para:
+    - Bucles (loop)
+    - Condicionales (cond)
+    - Asignaciones (assig)
+    - E/S (io)
+*/
 void stmts() : {}
 {
   ( stmt() )*
 }
 
+/** Una instrucción individual puede ser:
+    - Un bucle (WHILE o VARYING)
+    - Un condicional (IF...THEN...ELSE...END)
+    - Una asignación (MOVE, ADD, SUBTRACT, MULTIPLY, DIVIDE)
+    - Una operación de E/S (DISPLAY o ACCEPT)
+    
+    Todas terminan con punto (.)
+*/
 void stmt() : {}
 {
     loop() < DOT >
@@ -183,8 +358,24 @@ void stmt() : {}
   | io() < DOT >
 }
 
-/* ---------- BUCLES ---------- */
+/* ------------------------- BUCLES (loop) ---------------------------------- */
 
+/** Regla de bucles: Soporta WHILE y VARYING
+    
+    Bucle WHILE:
+      WHILE condición DO
+        ... instrucciones ...
+      END
+    
+    Bucle VARYING (contador):
+      VARYING variable [FROM inicio] TO fin [BY incremento] DO
+        ... instrucciones ...
+      END
+    
+    Generación de código:
+    - WHILE: Genera etiqueta de inicio, salto condicional, salto atrás
+    - VARYING: Similar, pero inicializa contador y genera incremento
+*/
 void loop() :
 {
   BooleanResult br;
@@ -193,35 +384,45 @@ void loop() :
   String ini, fin, paso;
 }
 {
+  /* Variante 1: WHILE */
   < WHILE >
   {
-    lIni = nuevaEtiqueta();
-    lFin = nuevaEtiqueta();
-    emit(lIni + ":");
+    // Crear etiquetas para saltos
+    lIni = nuevaEtiqueta();  // Etiqueta al inicio del bucle (para volver)
+    lFin = nuevaEtiqueta();  // Etiqueta al final (para salir)
+    emit(lIni + ":");        // Marcar inicio del bucle
   }
   br = booleanExpr() < DO >
   {
+    // Si la condición es falsa, saltar al final
     saltoFalso(br, lFin);
   }
   stmts()
   < END >
   {
+    // Volver al inicio del bucle y marcar el fin
     emit("goto " + lIni);
     emit(lFin + ":");
   }
 
 |
+
+  /* Variante 2: VARYING (bucle contador) */
   < VARYING > id = <ID>
   {
+    // Registrar variable de iteración
     registrarVariable(id.image);
-    lIni = nuevaEtiqueta();
-    lFin = nuevaEtiqueta();
+    lIni = nuevaEtiqueta();  // Etiqueta de condición
+    lFin = nuevaEtiqueta();  // Etiqueta de salida
   }
+  /* FROM es opcional (defecto: 1) */
   ( < FROM > ini = atomic() | { ini = "1"; } )
   < TO > fin = atomic()
+  /* BY es opcional (defecto: 1) */
   ( < BY > paso = atomic() | { paso = "1"; } )
   < DO >
   {
+    // Inicializar contador y establecer condición
     emit(id.image + " := " + ini);
     emit(lIni + ":");
     emit("if " + id.image + " > " + fin + " goto " + lFin);
@@ -229,14 +430,29 @@ void loop() :
   stmts()
   < END >
   {
+    // Incrementar contador y volver a la condición
     emit(id.image + " := " + id.image + " + " + paso);
     emit("goto " + lIni);
     emit(lFin + ":");
   }
 }
 
-/* ---------- CONDICIONAL ---------- */
+/* --------------------------------- CONDICIONALES (cond) ------------------------------ */
 
+/** Regla de condicional: IF...THEN...ELSE...END
+    
+    Sintaxis:
+      IF condición THEN
+        ... rama verdadera ...
+      [ELSE
+        ... rama falsa ...]
+      END
+    
+    Generación de código:
+    - Salto a ELSE si la condición es falsa
+    - Salto al final después de rama verdadera
+    - Rama ELSE es opcional
+*/
 void cond() :
 {
   BooleanResult br;
@@ -245,57 +461,87 @@ void cond() :
 {
   < IF > br = booleanExpr() < THEN >
   {
-    lElse = nuevaEtiqueta();
-    lFin = nuevaEtiqueta();
-    saltoFalso(br, lElse);
+    // Crear etiquetas para saltos
+    lElse = nuevaEtiqueta();  // Etiqueta de rama ELSE
+    lFin = nuevaEtiqueta();   // Etiqueta al final
+    saltoFalso(br, lElse);    // Si falsa, ir a ELSE
   }
   stmts()
   {
+    // Saltar al final si ejecutamos rama THEN
     emit("goto " + lFin);
-    emit(lElse + ":");
+    emit(lElse + ":");        // Marcar inicio de ELSE
   }
-  ( < ELSE > stmts() )?
+  ( < ELSE > stmts() )?       // ELSE es opcional
   < END >
   {
-    emit(lFin + ":");
+    emit(lFin + ":");         // Marcar fin del condicional
   }
 }
 
-/* ---------- ASIGNACIONES ---------- */
+/* --------------------------------- ASIGNACIONES (assig) --------------------------------- */
 
+/** Regla de asignaciones: Múltiples formas de asignación
+    
+    1. MOVE expresión TO variable
+       - variable := expresión
+    
+    2. ADD expresión TO variable
+       - variable := variable + expresión
+    
+    3. SUBTRACT expresión FROM variable
+       - variable := variable - expresión
+    
+    4. MULTIPLY expr BY expr GIVING variable
+       - variable := expr1 * expr2
+    
+    5. DIVIDE expr BY expr GIVING variable
+       - variable := expr1 / expr2
+    
+     Las operaciones usan temporales para guardar resultados
+*/
 void assig() :
 {
   String e1, e2, t;
   Token id;
 }
 {
+  /* MOVE: Asignación simple */
   < MOVE > e1 = expr() < TO > id = <ID>
   {
     registrarVariable(id.image);
     emit(id.image + " := " + e1);
   }
-| < ADD > e1 = expr() < TO > id = <ID>
+  
+| /* ADD: Suma */
+  < ADD > e1 = expr() < TO > id = <ID>
   {
     registrarVariable(id.image);
     t = nuevaTemp();
     emit(t + " := " + id.image + " + " + e1);
     emit(id.image + " := " + t);
   }
-| < SUBTRACT > e1 = expr() < FROM > id = <ID>
+  
+| /* SUBTRACT: Resta */
+  < SUBTRACT > e1 = expr() < FROM > id = <ID>
   {
     registrarVariable(id.image);
     t = nuevaTemp();
     emit(t + " := " + id.image + " - " + e1);
     emit(id.image + " := " + t);
   }
-| < MULTIPLY > e1 = expr() < BY > e2 = expr() < GIVING > id = <ID>
+  
+| /* MULTIPLY: Multiplicación */
+  < MULTIPLY > e1 = expr() < BY > e2 = expr() < GIVING > id = <ID>
   {
     registrarVariable(id.image);
     t = nuevaTemp();
     emit(t + " := " + e1 + " * " + e2);
     emit(id.image + " := " + t);
   }
-| < DIVIDE > e1 = expr() < BY > e2 = expr() < GIVING > id = <ID>
+  
+| /* DIVIDE: División */
+  < DIVIDE > e1 = expr() < BY > e2 = expr() < GIVING > id = <ID>
   {
     registrarVariable(id.image);
     t = nuevaTemp();
@@ -304,14 +550,26 @@ void assig() :
   }
 }
 
-/* ---------- IO ---------- */
+/* --------------------------------- E/S (io) --------------------------------- */
 
+/** Regla de entrada/salida
+    
+    DISPLAY: Escribe a salida estándar
+      - Puede ser múltiples valores separados por comas
+      - Cada valor genera una instrucción 'print'
+      - Ejemplo: DISPLAY "X=", X, ", Y=", Y
+    
+    ACCEPT: Lee desde entrada estándar
+      - Genera instrucción 'read' para la variable
+      - La variable se registra como utilizada
+*/
 void io() :
 {
   String l;
   Token id;
 }
 {
+  /* DISPLAY: Salida de uno o más valores */
   < DISPLAY > l = literal()
   {
     emit("print " + l);
@@ -322,15 +580,24 @@ void io() :
       emit("print " + l);
     }
   )*
-| < ACCEPT > id = <ID>
+  
+| /* ACCEPT: Entrada a una variable */
+  < ACCEPT > id = <ID>
   {
     registrarVariable(id.image);
     emit("read " + id.image);
   }
 }
 
-/* ---------- EXPRESIONES ---------- */
+/* --------------------------------- EXPRESIONES --------------------------------- */
 
+/** Regla de literales: Identifica valores constantes o variables
+    
+    Puede ser:
+    - ID: nombre de variable (A-Z, dígitos, guiones)
+    - NUM: número (entero, decimal, científico)
+    - CAD: cadena de texto (entre comillas)
+*/
 String literal() :
 {
   Token t;
@@ -340,6 +607,14 @@ String literal() :
   { return t.image; }
 }
 
+/** Regla de valores atómicos: Para inicializadores y límites
+    
+    Puede ser:
+    - ID: nombre de variable
+    - NUM: valor numérico
+    
+    No permite literales de texto como los literales normales
+*/
 String atomic() :
 {
   Token t;
@@ -349,6 +624,19 @@ String atomic() :
   { return t.image; }
 }
 
+/** Regla de expresiones aritméticas: Precedencia de operadores
+    
+    Precedencia (de mayor a menor):
+    1. Paréntesis y valores (val)
+    2. Multiplicación y división (mult)
+    3. Suma y resta (expr) ← Raíz
+    
+    Ejemplo: 2 + 3 * 4 = 2 + (3*4) = 2 + 12 = 14
+    
+    Generación de código: 
+    - Cada operación genera una temporal
+    - Construye árbol de temporales
+*/
 String expr() :
 {
   String a, b, t;
@@ -356,6 +644,7 @@ String expr() :
 {
   a = mult()
   (
+    /* Suma */
     "+" b = mult()
     {
       t = nuevaTemp();
@@ -363,6 +652,7 @@ String expr() :
       a = t;
     }
   |
+    /* Resta */
     "-" b = mult()
     {
       t = nuevaTemp();
@@ -373,6 +663,11 @@ String expr() :
   { return a; }
 }
 
+/** Regla de multiplicación y división
+    
+    Maneja * y / con mayor precedencia que + y -
+    Se recursiona en val() para paréntesis
+*/
 String mult() :
 {
   String a, b, t;
@@ -380,6 +675,7 @@ String mult() :
 {
   a = val()
   (
+    /* Multiplicación */
     "*" b = val()
     {
       t = nuevaTemp();
@@ -387,6 +683,7 @@ String mult() :
       a = t;
     }
   |
+    /* División */
     "/" b = val()
     {
       t = nuevaTemp();
@@ -397,6 +694,13 @@ String mult() :
   { return a; }
 }
 
+/** Regla de valores: Nivel más bajo de precedencia
+    
+    Puede ser:
+    - NUM: un número (retorna como es)
+    - ID: una variable (retorna nombre)
+    - (expr): expresión entre paréntesis (resuelve primero)
+*/
 String val() :
 {
   Token t;
@@ -408,8 +712,28 @@ String val() :
   | < PA > e = expr() < PC > { return e; }
 }
 
-/* ---------- BOOLEANEXPR ---------- */
+/* --------------------------------- EXPRESIONES BOOLEANAS (booleanExpr) --------------------------------- */
 
+/** Regla de expresiones booleanas: Comparaciones
+    
+    Formato general:
+      expresión IS [NOT] (GREATER/LESS/EQUAL) THAN expresión
+    
+    Ejemplos:
+    - X IS GREATER THAN 5
+    - Y IS NOT EQUAL TO 10
+    - Z IS LESS THAN 100
+    
+    Operadores soportados:
+    - GREATER THAN (>)
+    - LESS THAN (<)
+    - EQUAL TO (==)
+    
+    Retorna BooleanResult con:
+    - e1, e2: operandos
+    - op: operador
+    - negated: flag IS NOT
+*/
 BooleanResult booleanExpr() :
 {
   String e1, e2, op;
@@ -417,11 +741,14 @@ BooleanResult booleanExpr() :
 }
 {
   e1 = expr() < IS >
-  ( < NOT > { neg = true; } )?
+  ( < NOT > { neg = true; } )?  // Marcar si es negado
   (
+    /* Operador GREATER THAN (>) */
     < GREATER > < THAN > { op = ">"; }
-  | < LESS > < THAN >    { op = "<"; }
-  | < EQUAL > < TO >     { op = "=="; }
+  | /* Operador LESS THAN (<) */
+    < LESS > < THAN >    { op = "<"; }
+  | /* Operador EQUAL TO (==) */
+    < EQUAL > < TO >     { op = "=="; }
   )
   e2 = expr()
   {
